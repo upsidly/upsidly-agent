@@ -19,13 +19,13 @@ defined( 'ABSPATH' ) || exit;
  */
 class Upsidly_Agent_Connector {
 
-	const OPTION        = 'upsidly_agent_connector';
-	const AJAX_ACTION   = 'upsidly_connector';
-	const MAX_SKEW      = 300;
-	const MAX_BODY      = 4194304;
-	const STATE_PREFIX  = 'upsidly_agent_link_state_';
-	const NONCE_PREFIX  = 'upsidly_agent_cn_';
-	const OPS           = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all' );
+	const OPTION       = 'upsidly_agent_connector';
+	const AJAX_ACTION  = 'upsidly_connector';
+	const MAX_SKEW     = 300;
+	const MAX_BODY     = 4194304;
+	const STATE_PREFIX = 'upsidly_agent_link_state_';
+	const NONCE_PREFIX = 'upsidly_agent_cn_';
+	const OPS          = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all' );
 
 	/**
 	 * Administrateur au nom duquel s'exécute une demande signée valide (0 sinon).
@@ -104,9 +104,7 @@ class Upsidly_Agent_Connector {
 		return null !== self::get();
 	}
 
-	/* ------------------------------------------------------------------ */
-	/* Liaison                                                            */
-	/* ------------------------------------------------------------------ */
+	// Liaison.
 
 	/**
 	 * « Relier à Upsidly » : redirection vers le dashboard avec un état anti-falsification.
@@ -248,9 +246,7 @@ class Upsidly_Agent_Connector {
 		exit;
 	}
 
-	/* ------------------------------------------------------------------ */
-	/* Demandes signées                                                   */
-	/* ------------------------------------------------------------------ */
+	// Demandes signées.
 
 	/**
 	 * La requête courante vise-t-elle le connecteur ?
@@ -259,7 +255,8 @@ class Upsidly_Agent_Connector {
 	 */
 	private static function is_connector_request() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- authentifiée par signature.
-		return wp_doing_ajax() && isset( $_GET['action'] ) && self::AJAX_ACTION === $_GET['action'] && 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? '' );
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) ? sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '';
+		return wp_doing_ajax() && isset( $_GET['action'] ) && self::AJAX_ACTION === $_GET['action'] && 'post' === $method; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- authentifiée par signature.
 	}
 
 	/**
@@ -360,12 +357,28 @@ class Upsidly_Agent_Connector {
 	public static function handle() {
 		if ( null !== self::$error || 0 === self::$signed_user || get_current_user_id() !== self::$signed_user ) {
 			$error = self::$error ?? array( 'forbidden', 'Accès refusé.', 403 );
-			self::respond( array( 'error' => array( 'code' => $error[0], 'message' => $error[1] ) ), $error[2] );
+			self::respond(
+				array(
+					'error' => array(
+						'code'    => $error[0],
+						'message' => $error[1],
+					),
+				),
+				$error[2]
+			);
 		}
 		$result = self::dispatch( self::$payload );
 		if ( is_wp_error( $result ) ) {
 			$data = (array) $result->get_error_data();
-			self::respond( array( 'error' => array( 'code' => $result->get_error_code(), 'message' => $result->get_error_message() ) ), (int) ( $data['status'] ?? 400 ) );
+			self::respond(
+				array(
+					'error' => array(
+						'code'    => $result->get_error_code(),
+						'message' => $result->get_error_message(),
+					),
+				),
+				(int) ( $data['status'] ?? 400 )
+			);
 		}
 		self::respond( array( 'data' => $result ), 200 );
 	}
@@ -505,9 +518,7 @@ class Upsidly_Agent_Connector {
 		return isset( $_SERVER[ $key ] ) ? trim( (string) wp_unslash( $_SERVER[ $key ] ) ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- comparé à une signature.
 	}
 
-	/* ------------------------------------------------------------------ */
-	/* Chiffrement du secret au repos (clés de WordPress)                 */
-	/* ------------------------------------------------------------------ */
+	// Chiffrement du secret au repos (clés de WordPress).
 
 	/**
 	 * Clé de chiffrement dérivée des clés secrètes de WordPress.
