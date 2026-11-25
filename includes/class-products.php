@@ -47,7 +47,8 @@ class Upsidly_Agent_Products {
 			self::set_stock( $wc, $product['stock'] );
 			self::set_sku( $wc, $product['ugs'], $notes );
 
-			$wc->set_attributes( self::attributes( $product, $variable, $notes ) );
+			$mapping = array();
+			$wc->set_attributes( self::attributes( $product, $variable, $notes, $mapping ) );
 			$product_id = $wc->save();
 		} catch ( Exception $e ) {
 			return new WP_Error( 'upsidly_agent_product', __( 'Le produit n\'a pas pu être créé : ', 'upsidly-agent' ) . $e->getMessage(), array( 'status' => 500 ) );
@@ -65,7 +66,7 @@ class Upsidly_Agent_Products {
 		);
 
 		if ( $variable ) {
-			self::create_variations( $product_id, $product, $notes );
+			self::create_variations( $product_id, $product, $mapping, $notes );
 			WC_Product_Variable::sync( $product_id );
 		}
 
@@ -158,9 +159,10 @@ class Upsidly_Agent_Products {
 	 * @param array $product  Données produit.
 	 * @param bool  $variable Produit variable.
 	 * @param array $notes    Notes.
+	 * @param array $mapping  Correspondance nom (minuscules) => clé d'attribut et taxonomie, pour les variations (par référence).
 	 * @return WC_Product_Attribute[]
 	 */
-	private static function attributes( array $product, $variable, array &$notes ) {
+	private static function attributes( array $product, $variable, array &$notes, array &$mapping ) {
 		$attributes = array();
 		$position   = 0;
 
@@ -182,10 +184,21 @@ class Upsidly_Agent_Products {
 				$attribute->set_id( $global['id'] );
 				$attribute->set_name( $global['taxonomy'] );
 				$attribute->set_options( $term_ids );
+				$entry = array(
+					'key'      => sanitize_title( $global['taxonomy'] ),
+					'taxonomy' => $global['taxonomy'],
+				);
+				foreach ( array( $data['nom'], $global['label'], $global['slug'], $global['taxonomy'] ) as $alias ) {
+					$mapping[ mb_strtolower( $alias ) ] = $entry;
+				}
 			} else {
 				$attribute->set_id( 0 );
 				$attribute->set_name( $data['nom'] );
 				$attribute->set_options( $data['valeurs'] );
+				$mapping[ mb_strtolower( $data['nom'] ) ] = array(
+					'key'      => sanitize_title( $data['nom'] ),
+					'taxonomy' => '',
+				);
 			}
 
 			$attribute->set_position( $position++ );
@@ -201,7 +214,7 @@ class Upsidly_Agent_Products {
 	 * Attribut global correspondant à un nom (insensible à la casse).
 	 *
 	 * @param string $name Nom de l'attribut.
-	 * @return array{id: int, taxonomy: string}|null
+	 * @return array{id: int, taxonomy: string, label: string, slug: string}|null
 	 */
 	private static function global_attribute( $name ) {
 		foreach ( wc_get_attribute_taxonomies() as $attribute ) {
@@ -209,6 +222,8 @@ class Upsidly_Agent_Products {
 				return array(
 					'id'       => (int) $attribute->attribute_id,
 					'taxonomy' => wc_attribute_taxonomy_name( $attribute->attribute_name ),
+					'label'    => (string) $attribute->attribute_label,
+					'slug'     => (string) $attribute->attribute_name,
 				);
 			}
 		}
@@ -247,22 +262,24 @@ class Upsidly_Agent_Products {
 	 *
 	 * @param int   $product_id Produit parent.
 	 * @param array $product    Données produit.
+	 * @param array $mapping    Nom (minuscules) => clé d'attribut et taxonomie.
 	 * @param array $notes      Notes.
 	 */
-	private static function create_variations( $product_id, array $product, array &$notes ) {
-		$parent  = wc_get_product( $product_id );
-		$mapping = array();
+	private static function create_variations( $product_id, array $product, array $mapping, array &$notes ) {
+		// Seuls les attributs « pour variations » du produit enregistré sont utilisables.
+		$parent         = wc_get_product( $product_id );
+		$variation_keys = array();
 		foreach ( $parent->get_attributes() as $key => $attribute ) {
-			if ( ! $attribute->get_variation() ) {
-				continue;
+			if ( $attribute->get_variation() ) {
+				$variation_keys[] = $key;
 			}
-			$label = $attribute->is_taxonomy() ? wc_attribute_label( $attribute->get_name() ) : $attribute->get_name();
-
-			$mapping[ mb_strtolower( $label ) ] = array(
-				'key'      => $key,
-				'taxonomy' => $attribute->is_taxonomy() ? $attribute->get_name() : '',
-			);
 		}
+		$mapping = array_filter(
+			$mapping,
+			static function ( $entry ) use ( $variation_keys ) {
+				return in_array( $entry['key'], $variation_keys, true );
+			}
+		);
 
 		$missing_price = false;
 		foreach ( array_slice( $product['variations'], 0, self::MAX_VARIATIONS ) as $data ) {
