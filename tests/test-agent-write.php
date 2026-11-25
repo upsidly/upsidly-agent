@@ -69,8 +69,10 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		$wp_rest_server                   = null;
 		Upsidly_Agent_Agent_Loop::$client = null;
 		remove_all_filters( 'upsidly_agent_health_check' );
-		foreach ( (array) glob( $this->dir . '/*' ) as $file ) {
-			unlink( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		foreach ( array_merge( (array) glob( $this->dir . '/sous/*' ), (array) glob( $this->dir . '/*' ) ) as $file ) {
+			if ( is_file( $file ) ) {
+				unlink( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+			}
 		}
 		if ( is_dir( $this->dir . '/sous' ) ) {
 			rmdir( $this->dir . '/sous' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
