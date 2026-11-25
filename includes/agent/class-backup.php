@@ -121,6 +121,10 @@ class Upsidly_Agent_Backup {
 				$result = self::restore_post( (int) $backup['target'], $payload );
 				break;
 
+			case 'term':
+				$result = self::restore_term( (int) $backup['target'], $payload );
+				break;
+
 			default:
 				$result = new WP_Error( 'upsidly_agent_backup', __( 'Type de sauvegarde inconnu.', 'upsidly-agent' ) );
 		}
@@ -267,6 +271,9 @@ class Upsidly_Agent_Backup {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		foreach ( (array) ( $payload['terms'] ?? array() ) as $taxonomy => $ids ) {
+			wp_set_object_terms( $post_id, array_map( 'intval', (array) $ids ), (string) $taxonomy, false );
+		}
 		foreach ( (array) ( $payload['meta'] ?? array() ) as $key => $value ) {
 			if ( null === $value ) {
 				delete_post_meta( $post_id, $key );
@@ -275,6 +282,32 @@ class Upsidly_Agent_Backup {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Restaure un terme (ou supprime un terme créé).
+	 *
+	 * @param int   $term_id Terme.
+	 * @param array $payload Données.
+	 * @return true|WP_Error
+	 */
+	private static function restore_term( $term_id, array $payload ) {
+		$taxonomy = (string) ( $payload['taxonomy'] ?? '' );
+		if ( ! empty( $payload['created'] ) ) {
+			$deleted = wp_delete_term( $term_id, $taxonomy );
+			return ( true === $deleted || 0 === $deleted ) ? true : new WP_Error( 'upsidly_agent_term', __( 'Le terme créé n\'a pas pu être supprimé.', 'upsidly-agent' ) );
+		}
+		$result = wp_update_term(
+			$term_id,
+			$taxonomy,
+			array(
+				'name'        => (string) $payload['name'],
+				'slug'        => (string) $payload['slug'],
+				'description' => (string) $payload['description'],
+				'parent'      => (int) $payload['parent'],
+			)
+		);
+		return is_wp_error( $result ) ? $result : true;
 	}
 
 	/**

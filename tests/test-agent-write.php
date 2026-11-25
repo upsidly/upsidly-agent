@@ -565,4 +565,100 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		$this->assertSame( 403, $this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/decide", array( 'decision' => 'approve' ) )->get_status() );
 		$this->assertStringContainsString( "'avant'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 	}
+
+	/**
+	 * save_term : création puis annulation, modification puis annulation ; doublon et droits refusés.
+	 */
+	public function test_save_term() {
+		$proposal = $this->propose(
+			'save_term',
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Article test',
+			)
+		);
+		$this->assertSame( 'pending', $proposal['action']['status'] );
+		$this->assertStringContainsString( 'Article test', $proposal['action']['title'] );
+		$this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/decide", array( 'decision' => 'approve' ) );
+		$term = get_term_by( 'name', 'Article test', 'category' );
+		$this->assertNotFalse( $term );
+		$this->assertSame( 'article-test', $term->slug );
+
+		$this->assertFalse(
+			Upsidly_Agent_Tool_Registry::preview(
+				'save_term',
+				array(
+					'taxonomy' => 'category',
+					'name'     => 'Article test',
+				)
+			)['ok'],
+			'Doublon refusé'
+		);
+
+		$edit = $this->propose(
+			'save_term',
+			array(
+				'taxonomy'    => 'category',
+				'id'          => $term->term_id,
+				'name'        => 'Article renommé',
+				'description' => 'Une description',
+			)
+		);
+		$this->rest( 'POST', "/agent/actions/{$edit['action']['id']}/decide", array( 'decision' => 'approve' ) );
+		$this->assertSame( 'Article renommé', get_term( $term->term_id )->name );
+		$this->rest( 'POST', "/agent/actions/{$edit['action']['id']}/undo" );
+		$this->assertSame( 'Article test', get_term( $term->term_id )->name );
+
+		$this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/undo" );
+		$this->assertFalse( get_term_by( 'name', 'Article test', 'category' ) );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'author' ) ) );
+		$this->assertFalse(
+			Upsidly_Agent_Tool_Registry::preview(
+				'save_term',
+				array(
+					'taxonomy' => 'category',
+					'name'     => 'Interdit',
+				)
+			)['ok']
+		);
+	}
+
+	/**
+	 * save_content avec termes : assignation (terme créé au besoin) puis annulation.
+	 */
+	public function test_save_content_terms() {
+		$existing = self::factory()->category->create( array( 'name' => 'Conseils' ) );
+		$post     = self::factory()->post->create();
+		wp_set_post_categories( $post, array( $existing ) );
+
+		$proposal = $this->propose(
+			'save_content',
+			array(
+				'id'    => $post,
+				'terms' => array(
+					'category' => array( 'Actualités' ),
+					'post_tag' => array( 'nouveau' ),
+				),
+			)
+		);
+		$this->assertStringContainsString( 'Actualités', $proposal['action']['preview'] );
+		$this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/decide", array( 'decision' => 'approve' ) );
+		$this->assertSame( array( 'Actualités' ), wp_get_post_categories( $post, array( 'fields' => 'names' ) ) );
+		$this->assertSame( array( 'nouveau' ), wp_get_post_tags( $post, array( 'fields' => 'names' ) ) );
+
+		$this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/undo" );
+		$this->assertSame( array( $existing ), wp_get_post_categories( $post ) );
+		$this->assertSame( array(), wp_get_post_tags( $post, array( 'fields' => 'names' ) ) );
+
+		$bad = Upsidly_Agent_Tool_Registry::preview(
+			'save_content',
+			array(
+				'id'    => $post,
+				'terms' => array( 'product_cat' => array( 'x' ) ),
+			)
+		);
+		$this->assertFalse( $bad['ok'] );
+	}
 }
+

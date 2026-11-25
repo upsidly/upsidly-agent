@@ -34,7 +34,7 @@ class Upsidly_Agent_Tool_Registry {
 			'get_content'   => array( 'Upsidly_Agent_Tools_Content', 'get_content', self::RISK_READ ),
 			'db_query_read' => array( 'Upsidly_Agent_Tools_Database', 'db_query_read', self::RISK_READ ),
 		);
-		foreach ( array( 'edit_file', 'create_file', 'plugin_activate', 'plugin_deactivate', 'theme_activate', 'plugin_update', 'theme_update', 'plugin_install', 'update_option', 'save_content' ) as $write ) {
+		foreach ( array( 'edit_file', 'create_file', 'plugin_activate', 'plugin_deactivate', 'theme_activate', 'plugin_update', 'theme_update', 'plugin_install', 'update_option', 'save_content', 'save_term' ) as $write ) {
 			$tools[ $write ] = array( 'Upsidly_Agent_Tools_Write', $write, self::RISK_WRITE );
 		}
 

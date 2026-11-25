@@ -867,11 +867,62 @@ class Upsidly_Agent_Tools_Write {
 			$meta[ $key ] = wp_kses_post( (string) $value );
 		}
 
+		$terms = array();
+		foreach ( (array) ( $input['terms'] ?? array() ) as $taxonomy => $names ) {
+			$taxonomy = sanitize_key( (string) $taxonomy );
+			$object   = get_taxonomy( $taxonomy );
+			if ( ! $object || ! is_object_in_taxonomy( $type, $taxonomy ) ) {
+				/* translators: %s: taxonomie. */
+				return array( 'error' => sprintf( __( 'La taxonomie %s n\'existe pas pour ce type de contenu.', 'upsidly-agent' ), $taxonomy ) );
+			}
+			if ( ! current_user_can( $object->cap->assign_terms ) ) {
+				/* translators: %s: taxonomie. */
+				return array( 'error' => sprintf( __( 'Vous n\'avez pas le droit d\'assigner des termes de %s.', 'upsidly-agent' ), $object->labels->name ) );
+			}
+			$clean = array();
+			foreach ( (array) $names as $name ) {
+				$name = sanitize_text_field( (string) $name );
+				if ( '' === $name ) {
+					continue;
+				}
+				if ( ! get_term_by( 'name', $name, $taxonomy ) && ! current_user_can( $object->cap->manage_terms ) ) {
+					/* translators: 1: terme, 2: taxonomie. */
+					return array( 'error' => sprintf( __( 'Le terme « %1$s » n\'existe pas dans %2$s et vous n\'avez pas le droit de le créer.', 'upsidly-agent' ), $name, $object->labels->name ) );
+				}
+				$clean[] = $name;
+			}
+			$terms[ $taxonomy ] = array_values( array_unique( $clean ) );
+		}
+
 		return array(
 			'post'    => $post,
 			'postarr' => $postarr,
 			'meta'    => $meta,
+			'terms'   => $terms,
 		);
+	}
+
+	/**
+	 * Identifiants des termes (existants ou créés).
+	 *
+	 * @param string   $taxonomy Taxonomie.
+	 * @param string[] $names    Noms.
+	 * @return int[]
+	 */
+	private static function term_ids( $taxonomy, array $names ) {
+		$ids = array();
+		foreach ( $names as $name ) {
+			$term = get_term_by( 'name', $name, $taxonomy );
+			if ( $term ) {
+				$ids[] = (int) $term->term_id;
+				continue;
+			}
+			$created = wp_insert_term( $name, $taxonomy );
+			if ( ! is_wp_error( $created ) ) {
+				$ids[] = (int) $created['term_id'];
+			}
+		}
+		return $ids;
 	}
 
 	/**
@@ -899,6 +950,12 @@ class Upsidly_Agent_Tools_Write {
 		foreach ( $content['meta'] as $key => $value ) {
 			$before .= $post ? "\nMéta {$key} : " . (string) get_post_meta( $post->ID, $key, true ) : '';
 			$after  .= "\nMéta {$key} : {$value}";
+		}
+		foreach ( $content['terms'] as $taxonomy => $names ) {
+			$label   = get_taxonomy( $taxonomy )->labels->name;
+			$current = $post ? wp_get_post_terms( $post->ID, $taxonomy, array( 'fields' => 'names' ) ) : array();
+			$before .= $post ? "\n{$label} : " . implode( ', ', is_wp_error( $current ) ? array() : $current ) : '';
+			$after  .= "\n{$label} : " . implode( ', ', $names );
 		}
 
 		return array(
@@ -931,6 +988,11 @@ class Upsidly_Agent_Tools_Write {
 			foreach ( array_keys( $content['meta'] ) as $key ) {
 				$previous_meta[ $key ] = metadata_exists( 'post', $post->ID, $key ) ? maybe_serialize( get_post_meta( $post->ID, $key, true ) ) : null;
 			}
+			$previous_terms = array();
+			foreach ( array_keys( $content['terms'] ) as $taxonomy ) {
+				$ids                         = wp_get_post_terms( $post->ID, $taxonomy, array( 'fields' => 'ids' ) );
+				$previous_terms[ $taxonomy ] = is_wp_error( $ids ) ? array() : $ids;
+			}
 			$backup = Upsidly_Agent_Backup::create(
 				$action_id,
 				'post',
@@ -941,6 +1003,7 @@ class Upsidly_Agent_Tools_Write {
 					'excerpt' => $post->post_excerpt,
 					'status'  => $post->post_status,
 					'meta'    => $previous_meta,
+					'terms'   => $previous_terms,
 				)
 			);
 			$result = wp_update_post( wp_slash( $content['postarr'] ), true );
@@ -955,10 +1018,153 @@ class Upsidly_Agent_Tools_Write {
 		foreach ( $content['meta'] as $key => $value ) {
 			update_post_meta( (int) $result, $key, wp_slash( $value ) );
 		}
+		foreach ( $content['terms'] as $taxonomy => $names ) {
+			wp_set_object_terms( (int) $result, self::term_ids( $taxonomy, $names ), $taxonomy, false );
+		}
 
 		return self::result(
 			'applied',
 			sprintf( '%s (id %d, statut %s) : %s', $post ? 'Contenu modifié' : 'Contenu créé', (int) $result, get_post_status( (int) $result ), get_permalink( (int) $result ) ),
+			$backup
+		);
+	}
+
+	// ---------------------------------------------------------------------
+	// save_term.
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Prépare la création ou la modification d'un terme.
+	 *
+	 * @param array $input taxonomy, id, name, slug, description, parent.
+	 * @return array{taxonomy?: WP_Taxonomy, term?: WP_Term|null, args?: array, name?: string, error?: string}
+	 */
+	private static function prepare_term( array $input ) {
+		$taxonomy = get_taxonomy( sanitize_key( (string) ( $input['taxonomy'] ?? '' ) ) );
+		if ( ! $taxonomy || empty( $taxonomy->show_ui ) ) {
+			return array( 'error' => __( 'Taxonomie introuvable.', 'upsidly-agent' ) );
+		}
+		if ( ! current_user_can( $taxonomy->cap->manage_terms ) ) {
+			/* translators: %s: taxonomie. */
+			return array( 'error' => sprintf( __( 'Vous n\'avez pas le droit de gérer les %s.', 'upsidly-agent' ), strtolower( $taxonomy->labels->name ) ) );
+		}
+
+		$id   = (int) ( $input['id'] ?? 0 );
+		$term = $id ? get_term( $id, $taxonomy->name ) : null;
+		if ( $id && ( ! $term || is_wp_error( $term ) ) ) {
+			return array( 'error' => __( 'Terme introuvable.', 'upsidly-agent' ) );
+		}
+
+		$args = array();
+		if ( isset( $input['slug'] ) && '' !== $input['slug'] ) {
+			$args['slug'] = sanitize_title( (string) $input['slug'] );
+		}
+		if ( isset( $input['description'] ) ) {
+			$args['description'] = sanitize_textarea_field( (string) $input['description'] );
+		}
+		if ( isset( $input['parent'] ) && '' !== (string) $input['parent'] ) {
+			if ( ! $taxonomy->hierarchical ) {
+				return array( 'error' => __( 'Cette taxonomie n\'a pas de termes parents.', 'upsidly-agent' ) );
+			}
+			$parent = is_numeric( $input['parent'] ) ? get_term( (int) $input['parent'], $taxonomy->name ) : get_term_by( 'name', (string) $input['parent'], $taxonomy->name );
+			if ( ! $parent || is_wp_error( $parent ) ) {
+				return array( 'error' => __( 'Terme parent introuvable.', 'upsidly-agent' ) );
+			}
+			$args['parent'] = (int) $parent->term_id;
+		}
+
+		$name = isset( $input['name'] ) ? sanitize_text_field( (string) $input['name'] ) : ( $term ? $term->name : '' );
+		if ( '' === $name ) {
+			return array( 'error' => __( 'Nom du terme manquant.', 'upsidly-agent' ) );
+		}
+		if ( ! $term && term_exists( $name, $taxonomy->name, $args['parent'] ?? 0 ) ) {
+			return array( 'error' => __( 'Ce terme existe déjà.', 'upsidly-agent' ) );
+		}
+
+		return array(
+			'taxonomy' => $taxonomy,
+			'term'     => $term,
+			'args'     => $args,
+			'name'     => $name,
+		);
+	}
+
+	/**
+	 * Aperçu de save_term.
+	 *
+	 * @param array $input Entrées.
+	 * @return array
+	 */
+	public static function preview_save_term( array $input ) {
+		$prepared = self::prepare_term( $input );
+		if ( isset( $prepared['error'] ) ) {
+			return self::refuse( $prepared['error'] );
+		}
+		$term   = $prepared['term'];
+		$label  = $prepared['taxonomy']->labels->singular_name;
+		$parent = isset( $prepared['args']['parent'] ) ? get_term( $prepared['args']['parent'] )->name : '';
+		$after  = sprintf( "Nom : %s\nSlug : %s\nParent : %s\nDescription : %s", $prepared['name'], $prepared['args']['slug'] ?? ( $term ? $term->slug : sanitize_title( $prepared['name'] ) ), $parent, $prepared['args']['description'] ?? ( $term ? $term->description : '' ) );
+		$before = $term ? sprintf( "Nom : %s\nSlug : %s\nParent : %s\nDescription : %s", $term->name, $term->slug, $term->parent ? get_term( $term->parent )->name : '', $term->description ) : '';
+
+		return array(
+			'ok'      => true,
+			'title'   => $term
+				/* translators: 1: type de terme, 2: nom. */
+				? sprintf( __( 'Modifier %1$s « %2$s »', 'upsidly-agent' ), strtolower( $label ), $term->name )
+				/* translators: 1: type de terme, 2: nom. */
+				: sprintf( __( 'Créer %1$s « %2$s »', 'upsidly-agent' ), strtolower( $label ), $prepared['name'] ),
+			'preview' => self::diff( $before, $after ),
+		);
+	}
+
+	/**
+	 * Applique save_term.
+	 *
+	 * @param array $input     Entrées.
+	 * @param int   $action_id Action.
+	 * @return array
+	 */
+	public static function apply_save_term( array $input, $action_id ) {
+		$prepared = self::prepare_term( $input );
+		if ( isset( $prepared['error'] ) ) {
+			return self::result( 'failed', $prepared['error'] );
+		}
+		$taxonomy = $prepared['taxonomy']->name;
+		$term     = $prepared['term'];
+
+		if ( $term ) {
+			$backup = Upsidly_Agent_Backup::create(
+				$action_id,
+				'term',
+				(string) $term->term_id,
+				array(
+					'taxonomy'    => $taxonomy,
+					'name'        => $term->name,
+					'slug'        => $term->slug,
+					'description' => $term->description,
+					'parent'      => $term->parent,
+				)
+			);
+			$result = wp_update_term( $term->term_id, $taxonomy, array( 'name' => $prepared['name'] ) + $prepared['args'] );
+		} else {
+			$result = wp_insert_term( $prepared['name'], $taxonomy, $prepared['args'] );
+			$backup = is_wp_error( $result ) ? 0 : Upsidly_Agent_Backup::create(
+				$action_id,
+				'term',
+				(string) $result['term_id'],
+				array(
+					'taxonomy' => $taxonomy,
+					'created'  => true,
+				)
+			);
+		}
+		if ( is_wp_error( $result ) ) {
+			return self::result( 'failed', $result->get_error_message(), $backup );
+		}
+
+		return self::result(
+			'applied',
+			sprintf( '%s « %s » %s (id %d, taxonomie %s).', $prepared['taxonomy']->labels->singular_name, $prepared['name'], $term ? 'modifié' : 'créé', (int) $result['term_id'], $taxonomy ),
 			$backup
 		);
 	}
