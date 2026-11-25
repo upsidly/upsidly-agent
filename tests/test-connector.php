@@ -92,7 +92,7 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 						'body'     => wp_json_encode(
 							array(
 								'site_id' => 7,
-								'secret'  => 'secret-partage-0123456789',
+								'secret'  => 'secret-partage-0123456789abcdef0123456789',
 								'key'     => 'upa_' . str_repeat( 'd', 40 ),
 							)
 						),
@@ -114,7 +114,7 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 		$link = Upsidly_Agent_Connector::get();
 		$this->assertSame( 7, $link['site_id'] );
 		$this->assertSame( $this->admin, $link['user_id'] );
-		$this->assertSame( 'secret-partage-0123456789', $link['secret'] );
+		$this->assertSame( 'secret-partage-0123456789abcdef0123456789', $link['secret'] );
 		$this->assertStringNotContainsString( 'secret-partage', wp_json_encode( get_option( 'upsidly_agent_connector' ) ) );
 	}
 

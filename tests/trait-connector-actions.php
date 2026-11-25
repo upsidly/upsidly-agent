@@ -47,7 +47,7 @@ trait Upsidly_Agent_Test_Connector_Actions {
 			array(
 				'id'    => 'toolu_' . wp_generate_password( 8, false ),
 				'name'  => $name,
-				'input' => $input,
+				'input' => $input + array( 'raison' => 'Pour le test.' ),
 			),
 		);
 		$this->uses_by_conversation[ $id ] = $uses;
