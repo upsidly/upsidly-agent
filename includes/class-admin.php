@@ -203,6 +203,8 @@ class Upsidly_Agent_Admin {
 			'ack'         => (bool) get_user_meta( $user->ID, Upsidly_Agent_Agent_Rest::ACK_META, true ),
 			'settingsUrl' => current_user_can( 'manage_options' ) ? Upsidly_Agent_Settings::page_url() : '',
 			'historyUrl'  => add_query_arg( array( 'page' => self::HISTORY_SLUG ), admin_url( 'admin.php' ) ),
+			'ajaxUrl'     => admin_url( 'admin-ajax.php' ),
+			'ajaxNonce'   => wp_create_nonce( Upsidly_Agent_Agent_Rest::AJAX_NONCE ),
 		);
 	}
 

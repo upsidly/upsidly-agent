@@ -404,5 +404,31 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 		update_option( 'upsidly_agent_agent_enabled', '0' );
 		$this->assertFalse( Upsidly_Agent_Settings::agent_enabled() );
 	}
+
+	/**
+	 * Étape via admin-ajax : droits identiques à l'API REST.
+	 */
+	public function test_ajax_step_access() {
+		$this->client->queue['/v1/agent/turn'] = array(
+			self::turn(
+				array(
+					array(
+						'type' => 'text',
+						'text' => 'Bonjour.',
+					),
+				),
+				'end_turn'
+			),
+		);
+		$id = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Bonjour' ) )->get_data()['conversation']['id'];
+
+		$result = Upsidly_Agent_Agent_Rest::ajax_step_result( $id );
+		$this->assertIsArray( $result );
+		$this->assertSame( 'idle', $result['status'] );
+
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_step_result( $id ) );
+		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_step_result( '../etc' ) );
+	}
 }
 

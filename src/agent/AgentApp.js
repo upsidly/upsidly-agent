@@ -56,6 +56,25 @@ function errorMessage( error ) {
 }
 
 /**
+ * Appel admin-ajax : les étapes de l'agent et les actions validées s'exécutent dans le contexte
+ * de l'administration, où les extensions premium chargent leurs mises à jour et leurs licences.
+ *
+ * @param {Object} config Données de la page.
+ * @param {string} action Action AJAX.
+ * @param {Object} params Paramètres.
+ * @return {Promise<Object>} Réponse décodée.
+ */
+function ajax( config, action, params ) {
+	const body = new window.FormData();
+	body.append( 'action', action );
+	body.append( 'nonce', config.ajaxNonce );
+	Object.entries( params ).forEach( ( [ key, value ] ) =>
+		body.append( key, value )
+	);
+	return apiFetch( { url: config.ajaxUrl, method: 'POST', body } );
+}
+
+/**
  * Ajoute des messages sans doublon (par identifiant).
  *
  * @param {Array} current Messages affichés.
@@ -126,9 +145,8 @@ export default function AgentApp( { config } ) {
 					if ( stopRef.current ) {
 						break;
 					}
-					const res = await apiFetch( {
-						path: `${ API }/conversations/${ id }/step`,
-						method: 'POST',
+					const res = await ajax( config, 'upsidly_agent_step', {
+						conversation: id,
 					} );
 					setMessages( ( current ) =>
 						mergeMessages( current, res.messages )
@@ -164,7 +182,7 @@ export default function AgentApp( { config } ) {
 				loadConversations();
 			}
 		},
-		[ loadConversations ]
+		[ config, loadConversations ]
 	);
 
 	const openConversation = ( id ) => {
@@ -211,10 +229,10 @@ export default function AgentApp( { config } ) {
 		}
 		setDeciding( true );
 		setError( null );
-		apiFetch( {
-			path: `${ API }/actions/${ action.id }/decide`,
-			method: 'POST',
-			data: { decision, comment },
+		ajax( config, 'upsidly_agent_decide', {
+			action_id: action.id,
+			decision,
+			comment,
 		} )
 			.then( ( res ) => {
 				setActions( res.actions || [] );

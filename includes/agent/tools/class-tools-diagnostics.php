@@ -26,6 +26,10 @@ class Upsidly_Agent_Tools_Diagnostics {
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 
+		// Vérification des mises à jour (dans le contexte admin, les extensions premium ajoutent les leurs).
+		require_once ABSPATH . 'wp-admin/includes/update.php';
+		wp_update_plugins();
+		wp_update_themes();
 		$updates = get_site_transient( 'update_plugins' );
 		$active  = (array) get_option( 'active_plugins', array() );
 		$plugins = array();
@@ -69,7 +73,7 @@ class Upsidly_Agent_Tools_Diagnostics {
 
 		return Upsidly_Agent_Guard::to_result(
 			array(
-				'site'            => array(
+				'site'                   => array(
 					'nom'        => get_bloginfo( 'name' ),
 					'home'       => home_url(),
 					'siteurl'    => site_url(),
@@ -78,14 +82,14 @@ class Upsidly_Agent_Tools_Diagnostics {
 					'multisite'  => is_multisite(),
 					'permaliens' => (string) get_option( 'permalink_structure' ),
 				),
-				'versions'        => array(
+				'versions'               => array(
 					'wordpress'            => get_bloginfo( 'version' ),
 					'php'                  => PHP_VERSION,
 					'mysql'                => $wpdb->db_version(),
 					'plugin_upsidly_agent' => UPSIDLY_AGENT_VERSION,
 				),
-				'base_de_donnees' => array( 'prefixe_tables' => $wpdb->prefix ),
-				'constantes'      => array(
+				'base_de_donnees'        => array( 'prefixe_tables' => $wpdb->prefix ),
+				'constantes'             => array(
 					'WP_DEBUG'           => defined( 'WP_DEBUG' ) && WP_DEBUG,
 					'WP_DEBUG_LOG'       => defined( 'WP_DEBUG_LOG' ) ? WP_DEBUG_LOG : false,
 					'WP_DEBUG_DISPLAY'   => defined( 'WP_DEBUG_DISPLAY' ) ? WP_DEBUG_DISPLAY : null,
@@ -95,18 +99,39 @@ class Upsidly_Agent_Tools_Diagnostics {
 					'WP_CACHE'           => defined( 'WP_CACHE' ) && WP_CACHE,
 					'DISABLE_WP_CRON'    => defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON,
 				),
-				'php'             => array(
+				'php'                    => array(
 					'memory_limit'        => ini_get( 'memory_limit' ),
 					'max_execution_time'  => ini_get( 'max_execution_time' ),
 					'upload_max_filesize' => ini_get( 'upload_max_filesize' ),
 				),
-				'theme'           => $theme_info,
-				'extensions'      => $plugins,
-				'mu_plugins'      => $mu,
-				'cron_en_retard'  => $overdue,
-				'sante_du_site'   => is_array( $health ) ? $health : 'non calculée (ouvrir Outils > Santé du site)',
+				'theme'                  => $theme_info,
+				'extensions'             => $plugins,
+				'mu_plugins'             => $mu,
+				'themes_a_mettre_a_jour' => self::theme_updates(),
+				'contexte_admin'         => is_admin(),
+				'cron_en_retard'         => $overdue,
+				'sante_du_site'          => is_array( $health ) ? $health : 'non calculée (ouvrir Outils > Santé du site)',
 			)
 		);
+	}
+
+	/**
+	 * Thèmes avec une mise à jour disponible.
+	 *
+	 * @return array<int, array{dossier: string, version: string, nouvelle_version: string}>
+	 */
+	private static function theme_updates() {
+		$updates = get_site_transient( 'update_themes' );
+		$list    = array();
+		foreach ( (array) ( $updates->response ?? array() ) as $stylesheet => $data ) {
+			$theme  = wp_get_theme( (string) $stylesheet );
+			$list[] = array(
+				'dossier'          => (string) $stylesheet,
+				'version'          => (string) $theme->get( 'Version' ),
+				'nouvelle_version' => (string) ( $data['new_version'] ?? '' ),
+			);
+		}
+		return $list;
 	}
 
 	/**

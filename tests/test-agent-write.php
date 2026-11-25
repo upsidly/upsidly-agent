@@ -660,5 +660,29 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		);
 		$this->assertFalse( $bad['ok'] );
 	}
+
+	/**
+	 * Décision via admin-ajax : propriétaire uniquement, décision validée.
+	 */
+	public function test_ajax_decide() {
+		$proposal = $this->propose(
+			'edit_file',
+			array(
+				'path'     => 'upsidly-agent-write-test/a.php',
+				'old_text' => "echo 'avant';",
+				'new_text' => "echo 'ajax';",
+			)
+		);
+		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_decide_result( $proposal['action']['id'], 'peut-etre', '' ) );
+
+		$owner = get_current_user_id();
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_decide_result( $proposal['action']['id'], 'approve', '' ) );
+
+		wp_set_current_user( $owner );
+		$result = Upsidly_Agent_Agent_Rest::ajax_decide_result( $proposal['action']['id'], 'approve', '' );
+		$this->assertSame( 'applied', $result['actions'][0]['status'] );
+		$this->assertStringContainsString( "'ajax'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+	}
 }
 

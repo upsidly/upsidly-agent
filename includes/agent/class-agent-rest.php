@@ -15,12 +15,92 @@ class Upsidly_Agent_Agent_Rest {
 	const CAPABILITY  = 'upsidly_agent_use';
 	const ACK_META    = 'upsidly_agent_ack';
 	const MAX_MESSAGE = 8000;
+	const AJAX_NONCE  = 'upsidly_agent_ajax';
 
 	/**
 	 * Branche les hooks.
 	 */
 	public static function init() {
 		add_action( 'rest_api_init', array( __CLASS__, 'register_routes' ) );
+		add_action( 'wp_ajax_upsidly_agent_step', array( __CLASS__, 'ajax_step' ) );
+		add_action( 'wp_ajax_upsidly_agent_decide', array( __CLASS__, 'ajax_decide' ) );
+	}
+
+	/**
+	 * AJAX : une étape de l'agent, exécutée dans le contexte de l'administration.
+	 */
+	public static function ajax_step() {
+		check_ajax_referer( self::AJAX_NONCE, 'nonce' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce vérifié ci-dessus.
+		$id = sanitize_key( wp_unslash( (string) ( $_POST['conversation'] ?? '' ) ) );
+		self::send( self::ajax_step_result( $id ) );
+	}
+
+	/**
+	 * AJAX : décision sur une action, appliquée dans le contexte de l'administration.
+	 */
+	public static function ajax_decide() {
+		check_ajax_referer( self::AJAX_NONCE, 'nonce' );
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- nonce vérifié ci-dessus.
+		$action_id = absint( wp_unslash( $_POST['action_id'] ?? 0 ) );
+		$decision  = sanitize_key( wp_unslash( (string) ( $_POST['decision'] ?? '' ) ) );
+		$comment   = sanitize_textarea_field( wp_unslash( (string) ( $_POST['comment'] ?? '' ) ) );
+		// phpcs:enable
+		self::send( self::ajax_decide_result( $action_id, $decision, $comment ) );
+	}
+
+	/**
+	 * Étape après contrôle des droits.
+	 *
+	 * @param string $id Conversation.
+	 * @return array|WP_Error
+	 */
+	public static function ajax_step_result( $id ) {
+		$conversation = preg_match( '/^[a-z0-9]{26}$/', $id ) ? Upsidly_Agent_Agent_Store::get( $id ) : null;
+		if ( ! self::can_use() || ! $conversation || get_current_user_id() !== (int) $conversation['user_id'] ) {
+			return new WP_Error( 'rest_forbidden', __( 'Accès refusé.', 'upsidly-agent' ), array( 'status' => 403 ) );
+		}
+		return Upsidly_Agent_Agent_Loop::step( $id );
+	}
+
+	/**
+	 * Décision après contrôle des droits.
+	 *
+	 * @param int    $action_id Action.
+	 * @param string $decision  approve | reject.
+	 * @param string $comment   Commentaire.
+	 * @return array|WP_Error
+	 */
+	public static function ajax_decide_result( $action_id, $decision, $comment ) {
+		$action       = Upsidly_Agent_Agent_Store::get_action( $action_id );
+		$conversation = $action ? Upsidly_Agent_Agent_Store::get( (string) $action['conversation_id'] ) : null;
+		if ( ! self::can_use() || ! $conversation || get_current_user_id() !== (int) $conversation['user_id'] ) {
+			return new WP_Error( 'rest_forbidden', __( 'Accès refusé.', 'upsidly-agent' ), array( 'status' => 403 ) );
+		}
+		if ( ! in_array( $decision, array( 'approve', 'reject' ), true ) ) {
+			return new WP_Error( 'upsidly_agent_decision', __( 'Décision invalide.', 'upsidly-agent' ), array( 'status' => 400 ) );
+		}
+		return Upsidly_Agent_Agent_Loop::decide( $action_id, $decision, $comment );
+	}
+
+	/**
+	 * Réponse JSON (même format que l'API REST : code, message, data en cas d'erreur).
+	 *
+	 * @param array|WP_Error $result Résultat.
+	 */
+	private static function send( $result ) {
+		if ( is_wp_error( $result ) ) {
+			$data = (array) $result->get_error_data();
+			wp_send_json(
+				array(
+					'code'    => $result->get_error_code(),
+					'message' => $result->get_error_message(),
+					'data'    => $data,
+				),
+				(int) ( $data['status'] ?? 500 )
+			);
+		}
+		wp_send_json( $result );
 	}
 
 	/**
