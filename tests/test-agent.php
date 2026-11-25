@@ -356,7 +356,7 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 
 		// Agent désactivé sur le site.
 		wp_set_current_user( $this->admin );
-		update_option( 'upsidly_agent_agent_enabled', '' );
+		update_option( 'upsidly_agent_agent_enabled', '0' );
 		$this->assertSame( 403, $this->rest( 'GET', '/agent/conversations' )->get_status() );
 		update_option( 'upsidly_agent_agent_enabled', '1' );
 
@@ -394,4 +394,15 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( str_repeat( 'c', 40 ), $json );
 		$this->assertStringNotContainsString( 'upa_', $json );
 	}
+
+	/**
+	 * Agent activé par défaut (option absente).
+	 */
+	public function test_agent_enabled_by_default() {
+		delete_option( 'upsidly_agent_agent_enabled' );
+		$this->assertTrue( Upsidly_Agent_Settings::agent_enabled() );
+		update_option( 'upsidly_agent_agent_enabled', '0' );
+		$this->assertFalse( Upsidly_Agent_Settings::agent_enabled() );
+	}
 }
+

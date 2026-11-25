@@ -43,10 +43,13 @@ class Upsidly_Agent_Settings {
 	 * Crée les options (autoload désactivé) si elles n'existent pas.
 	 */
 	public static function add_options() {
-		foreach ( array( self::OPTION_KEY, self::OPTION_DESCRIPTION, self::OPTION_VOICE, self::OPTION_CONNECTION, self::OPTION_AGENT ) as $option ) {
+		foreach ( array( self::OPTION_KEY, self::OPTION_DESCRIPTION, self::OPTION_VOICE, self::OPTION_CONNECTION ) as $option ) {
 			if ( false === get_option( $option, false ) ) {
 				add_option( $option, '', '', false );
 			}
+		}
+		if ( false === get_option( self::OPTION_AGENT, false ) ) {
+			add_option( self::OPTION_AGENT, '1', '', false );
 		}
 	}
 
@@ -108,7 +111,8 @@ class Upsidly_Agent_Settings {
 	 * @return bool
 	 */
 	public static function agent_enabled() {
-		return '1' === (string) get_option( self::OPTION_AGENT, '' );
+		// Activé par défaut : c'est le niveau d'agent de la clé (côté Upsidly) qui fixe ce qui est permis.
+		return '0' !== (string) get_option( self::OPTION_AGENT, '1' );
 	}
 
 	/**
@@ -153,9 +157,9 @@ class Upsidly_Agent_Settings {
 			array(
 				'type'              => 'string',
 				'sanitize_callback' => static function ( $value ) {
-					return empty( $value ) ? '' : '1';
+					return empty( $value ) ? '0' : '1';
 				},
-				'default'           => '',
+				'default'           => '1',
 				'show_in_rest'      => false,
 			)
 		);

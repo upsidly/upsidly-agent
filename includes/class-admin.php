@@ -219,7 +219,7 @@ class Upsidly_Agent_Admin {
 		} elseif ( ! Upsidly_Agent_Settings::agent_enabled() ) {
 			$message = __( 'L\'agent est désactivé sur ce site. Vous pouvez l\'activer dans Réglages.', 'upsidly-agent' );
 		} elseif ( ! is_readable( UPSIDLY_AGENT_DIR . 'build/agent.asset.php' ) ) {
-			$message = __( 'Les fichiers de l\'interface sont absents. Installez le plugin à partir du fichier ZIP de la release.', 'upsidly-agent' );
+			$message = __( 'Les fichiers de l\'interface (dossier build) sont absents : réinstallez l\'extension depuis github.com/upsidly/upsidly-agent.', 'upsidly-agent' );
 		}
 		?>
 		<div class="wrap upsidly-agent-chat-wrap">
@@ -328,7 +328,7 @@ class Upsidly_Agent_Admin {
 				</div>
 			<?php elseif ( ! is_readable( UPSIDLY_AGENT_DIR . 'build/index.asset.php' ) ) : ?>
 				<div class="notice notice-error inline">
-					<p><?php esc_html_e( 'Les fichiers de l\'interface sont absents. Installez le plugin à partir du fichier ZIP de la release.', 'upsidly-agent' ); ?></p>
+					<p><?php esc_html_e( 'Les fichiers de l\'interface (dossier build) sont absents : réinstallez l\'extension depuis github.com/upsidly/upsidly-agent.', 'upsidly-agent' ); ?></p>
 				</div>
 			<?php else : ?>
 				<div id="upsidly-agent-app"></div>
