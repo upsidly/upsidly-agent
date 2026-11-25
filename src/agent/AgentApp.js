@@ -87,7 +87,6 @@ export default function AgentApp( { config } ) {
 
 	const credits = status && status.credits;
 	const agent = ( status && status.agent ) || {};
-	const budget = agent.budget || 200;
 
 	const loadConversations = useCallback( () => {
 		apiFetch( { path: `${ API }/conversations` } )
@@ -535,13 +534,12 @@ export default function AgentApp( { config } ) {
 							{ currentId && (
 								<Fragment>
 									{ sprintf(
-										/* translators: 1: crédits utilisés, 2: budget. */
+										/* translators: %s: nombre de demandes. */
 										__(
-											'Conversation : %1$s / %2$s crédits',
+											'Demandes dans cette conversation : %s (1 crédit chacune)',
 											'upsidly-agent'
 										),
-										convCredits,
-										budget
+										convCredits
 									) }
 								</Fragment>
 							) }

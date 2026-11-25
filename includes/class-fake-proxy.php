@@ -155,9 +155,9 @@ class Upsidly_Agent_Fake_Proxy {
 				'credits' => array_merge(
 					$credits,
 					array(
-						'used'      => 128,
-						'remaining' => 872,
-						'charged'   => 8,
+						'used'      => 121,
+						'remaining' => 879,
+						'charged'   => 1,
 					)
 				),
 			),

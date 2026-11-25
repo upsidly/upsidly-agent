@@ -78,3 +78,7 @@ Page **Upsidly Agent → Agent** : une conversation avec un agent de maintenance
 - **Garde-fous** : `wp-config.php`, `.env` et le cœur de WordPress inaccessibles, liens symboliques sortants refusés, secrets (constantes, clés d'API, mots de passe) et données personnelles (e-mails, téléphones, adresses, IP) masqués avant envoi, résultats tronqués à 20 000 caractères, 40 étapes maximum par demande et budget par conversation fixé par le proxy.
 - **Données** : conversations stockées sur le site (`{prefix}upsidly_agent_conversations`, `…_messages`), purgées après 90 jours (cron `upsidly_agent_daily_purge`). Le proxy ne conserve que des compteurs.
 - Les outils qui modifient le site (lot B) et les outils dangereux (lot C) ne sont pas encore disponibles.
+
+## Crédits
+
+1 crédit = 1 demande : chaque génération de Rédaction rapide et chaque message envoyé à l'agent comptent 1 crédit. Le travail de l'agent entre deux messages (lectures, étapes, reprises après validation) n'est pas décompté.
