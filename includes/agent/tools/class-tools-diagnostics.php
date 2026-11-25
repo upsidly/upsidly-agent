@@ -56,6 +56,7 @@ class Upsidly_Agent_Tools_Diagnostics {
 			'nom'     => $theme->get( 'Name' ),
 			'version' => $theme->get( 'Version' ),
 			'dossier' => 'themes/' . $theme->get_stylesheet(),
+			'type'    => function_exists( 'wp_is_block_theme' ) && wp_is_block_theme() ? 'thème bloc (modèles : voir theme_info)' : 'thème classique (voir theme_info)',
 		);
 		if ( $theme->parent() ) {
 			$theme_info['parent'] = array(

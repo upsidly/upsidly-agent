@@ -56,6 +56,8 @@ class Upsidly_Agent_Environment {
 			'file_edit_allowed' => ! ( defined( 'DISALLOW_FILE_EDIT' ) && DISALLOW_FILE_EDIT ),
 			'file_mods_allowed' => ! ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ),
 			'active_plugins'    => array_slice( $names, 0, 80 ),
+			'block_theme'       => function_exists( 'wp_is_block_theme' ) && wp_is_block_theme(),
+			'theme_tools'       => true,
 		);
 	}
 

@@ -824,6 +824,130 @@ class Upsidly_Agent_Tools_Write {
 	}
 
 	// ---------------------------------------------------------------------
+	// save_template (thème bloc : modèles et parties de modèle).
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Vérifie une modification de modèle.
+	 *
+	 * @param array $input type, slug, content.
+	 * @return array{template?: WP_Block_Template, content?: string, error?: string}
+	 */
+	private static function prepare_template( array $input ) {
+		$template = Upsidly_Agent_Tools_Theme::find( $input );
+		if ( is_wp_error( $template ) ) {
+			return array( 'error' => $template->get_error_message() );
+		}
+		$content = str_replace( "\r\n", "\n", (string) ( $input['content'] ?? '' ) );
+		if ( 'wp_template' === $template->type && '' === trim( $content ) ) {
+			return array( 'error' => 'Un modèle de page ne peut pas être vide.' );
+		}
+		if ( false !== stripos( $content, '<?php' ) || preg_match( '/<script\b/i', $content ) ) {
+			return array( 'error' => 'Code PHP ou script interdit dans un modèle : utiliser uniquement des blocs.' );
+		}
+		if ( trim( $content ) === trim( (string) $template->content ) ) {
+			return array( 'error' => 'Aucun changement par rapport au contenu actuel.' );
+		}
+		return array(
+			'template' => $template,
+			'content'  => $content,
+		);
+	}
+
+	/**
+	 * Aperçu de save_template.
+	 *
+	 * @param array $input Entrées.
+	 * @return array
+	 */
+	public static function preview_save_template( array $input ) {
+		$prepared = self::prepare_template( $input );
+		if ( isset( $prepared['error'] ) ) {
+			return self::refuse( $prepared['error'] );
+		}
+		$template = $prepared['template'];
+		return array(
+			'ok'      => true,
+			'title'   => sprintf(
+				/* translators: 1: type, 2: titre, 3: slug. */
+				__( 'Modifier %1$s « %2$s » (%3$s)', 'upsidly-agent' ),
+				'wp_template' === $template->type ? __( 'le modèle', 'upsidly-agent' ) : __( 'la partie de modèle', 'upsidly-agent' ),
+				$template->title,
+				$template->slug
+			),
+			'preview' => self::diff( (string) $template->content, $prepared['content'], __( 'Actuel', 'upsidly-agent' ), __( 'Proposé', 'upsidly-agent' ) ),
+		);
+	}
+
+	/**
+	 * Applique save_template : personnalisation enregistrée en base (comme l'éditeur de site), annulable.
+	 *
+	 * @param array $input     Entrées.
+	 * @param int   $action_id Action.
+	 * @return array
+	 */
+	public static function apply_save_template( array $input, $action_id ) {
+		$prepared = self::prepare_template( $input );
+		if ( isset( $prepared['error'] ) ) {
+			return self::result( 'failed', $prepared['error'] );
+		}
+		$template = $prepared['template'];
+
+		if ( 'custom' === $template->source && ! empty( $template->wp_id ) ) {
+			$post   = get_post( (int) $template->wp_id );
+			$backup = Upsidly_Agent_Backup::create(
+				$action_id,
+				'post',
+				(string) $post->ID,
+				array(
+					'title'   => $post->post_title,
+					'content' => $post->post_content,
+					'excerpt' => $post->post_excerpt,
+					'status'  => $post->post_status,
+				)
+			);
+			$result = wp_update_post(
+				wp_slash(
+					array(
+						'ID'           => $post->ID,
+						'post_content' => $prepared['content'],
+					)
+				),
+				true
+			);
+		} else {
+			$result = wp_insert_post(
+				wp_slash(
+					array(
+						'post_type'    => $template->type,
+						'post_name'    => $template->slug,
+						'post_title'   => $template->title,
+						'post_content' => $prepared['content'],
+						'post_status'  => 'publish',
+					)
+				),
+				true
+			);
+			if ( ! is_wp_error( $result ) ) {
+				wp_set_post_terms( (int) $result, array( get_stylesheet() ), 'wp_theme' );
+				if ( 'wp_template_part' === $template->type && ! empty( $template->area ) ) {
+					wp_set_post_terms( (int) $result, array( $template->area ), 'wp_template_part_area' );
+				}
+			}
+			// Annulation : la personnalisation est retirée, le fichier du thème s'applique de nouveau.
+			$backup = is_wp_error( $result ) ? 0 : Upsidly_Agent_Backup::create( $action_id, 'post', (string) $result, array( 'created' => true ) );
+		}
+		if ( is_wp_error( $result ) ) {
+			return self::result( 'failed', $result->get_error_message(), $backup );
+		}
+
+		return self::checked(
+			$backup,
+			sprintf( '%s « %s » enregistré(e) comme personnalisation du thème (visible dans Apparence > Éditeur).', 'wp_template' === $template->type ? 'Modèle' : 'Partie de modèle', $template->slug )
+		);
+	}
+
+	// ---------------------------------------------------------------------
 	// save_content.
 	// ---------------------------------------------------------------------
 

@@ -45,6 +45,7 @@ final class Upsidly_Agent_Plugin {
 		'agent/tools/class-tools-settings.php'    => 'Upsidly_Agent_Tools_Settings',
 		'agent/tools/class-tools-content.php'     => 'Upsidly_Agent_Tools_Content',
 		'agent/tools/class-tools-database.php'    => 'Upsidly_Agent_Tools_Database',
+		'agent/tools/class-tools-theme.php'       => 'Upsidly_Agent_Tools_Theme',
 		'agent/class-actions.php'                 => 'Upsidly_Agent_Actions',
 		'class-connector.php'                     => 'Upsidly_Agent_Connector',
 	);
