@@ -122,6 +122,42 @@ class Upsidly_Agent_Tools_Write {
 	}
 
 	/**
+	 * Mise à jour connue mais sans fichier téléchargeable (licence absente ou expirée).
+	 *
+	 * @param string $name     Nom.
+	 * @param string $current  Version installée.
+	 * @param string $new_version Nouvelle version.
+	 * @param string $of_what  « de l'extension » ou « du thème ».
+	 * @return string
+	 */
+	private static function no_package_message( $name, $current, $new_version, $of_what ) {
+		return sprintf(
+			/* translators: 1: nom, 2: version installée, 3: nouvelle version, 4: « de l'extension » ou « du thème ». */
+			__( '%1$s %2$s → %3$s : la mise à jour existe mais aucun fichier n\'est téléchargeable. La licence %4$s est absente, expirée ou non activée sur ce site : renseignez-la dans ses réglages ou renouvelez-la auprès de l\'éditeur, puis relancez la mise à jour. Rien n\'a été modifié.', 'upsidly-agent' ),
+			$name,
+			$current,
+			$new_version,
+			$of_what
+		);
+	}
+
+	/**
+	 * Message d'échec d'une mise à jour (téléchargement refusé : piste de la licence).
+	 *
+	 * @param mixed $result Résultat de l'upgrader.
+	 * @return string
+	 */
+	private static function update_failure_message( $result ) {
+		$detail  = is_wp_error( $result ) ? $result->get_error_message() : 'erreur inconnue';
+		$message = 'Mise à jour échouée : ' . $detail . '. Ancienne version restaurée.';
+		$codes   = is_wp_error( $result ) ? $result->get_error_codes() : array();
+		if ( array_intersect( $codes, array( 'download_failed', 'no_package', 'http_404', 'incompatible_archive' ) ) || preg_match( '/(licen|unauthori|forbidden|403|401|download)/i', $detail ) ) {
+			$message .= ' Le téléchargement a été refusé : la licence de cette extension ou de ce thème est probablement absente ou expirée sur ce site.';
+		}
+		return $message;
+	}
+
+	/**
 	 * Fonctions d'administration nécessaires aux extensions et thèmes.
 	 */
 	private static function load_admin() {
@@ -489,6 +525,9 @@ class Upsidly_Agent_Tools_Write {
 		if ( empty( $updates->response[ $plugin ]->new_version ) ) {
 			return self::refuse( __( 'Aucune mise à jour connue pour cette extension.', 'upsidly-agent' ) );
 		}
+		if ( empty( $updates->response[ $plugin ]->package ) ) {
+			return self::refuse( self::no_package_message( $data['Name'], $data['Version'], (string) $updates->response[ $plugin ]->new_version, __( 'de l\'extension', 'upsidly-agent' ) ) );
+		}
 		return array(
 			'ok'      => true,
 			/* translators: 1: extension, 2: version actuelle, 3: nouvelle version. */
@@ -526,7 +565,7 @@ class Upsidly_Agent_Tools_Write {
 		$result   = $upgrader->upgrade( $plugin );
 		if ( true !== $result ) {
 			Upsidly_Agent_Backup::restore( $backup );
-			return self::result( 'failed', 'Mise à jour échouée : ' . ( is_wp_error( $result ) ? $result->get_error_message() : 'erreur inconnue' ) . '. Ancienne version restaurée.', $backup );
+			return self::result( 'failed', self::update_failure_message( $result ), $backup );
 		}
 		if ( $was_active && ! is_plugin_active( $plugin ) ) {
 			activate_plugin( $plugin );
@@ -555,6 +594,9 @@ class Upsidly_Agent_Tools_Write {
 		$updates = get_site_transient( 'update_themes' );
 		if ( empty( $updates->response[ $stylesheet ]['new_version'] ) ) {
 			return self::refuse( __( 'Aucune mise à jour connue pour ce thème.', 'upsidly-agent' ) );
+		}
+		if ( empty( $updates->response[ $stylesheet ]['package'] ) ) {
+			return self::refuse( self::no_package_message( $theme->get( 'Name' ), $theme->get( 'Version' ), (string) $updates->response[ $stylesheet ]['new_version'], __( 'du thème', 'upsidly-agent' ) ) );
 		}
 		return array(
 			'ok'      => true,
@@ -591,7 +633,7 @@ class Upsidly_Agent_Tools_Write {
 		$result   = $upgrader->upgrade( $stylesheet );
 		if ( true !== $result ) {
 			Upsidly_Agent_Backup::restore( $backup );
-			return self::result( 'failed', 'Mise à jour échouée : ' . ( is_wp_error( $result ) ? $result->get_error_message() : 'erreur inconnue' ) . '. Ancienne version restaurée.', $backup );
+			return self::result( 'failed', self::update_failure_message( $result ), $backup );
 		}
 		return self::checked( $backup, sprintf( 'Thème %s mis à jour (version %s).', $stylesheet, wp_get_theme( $stylesheet )->get( 'Version' ) ) );
 	}

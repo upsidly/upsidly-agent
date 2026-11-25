@@ -40,6 +40,9 @@ class Upsidly_Agent_Tools_Diagnostics {
 				'version'                => $data['Version'],
 				'actif'                  => in_array( $file, $active, true ) || is_plugin_active_for_network( $file ),
 				'mise_a_jour_disponible' => isset( $updates->response[ $file ]->new_version ) ? $updates->response[ $file ]->new_version : null,
+				'fichier_de_mise_a_jour' => isset( $updates->response[ $file ]->new_version )
+					? ( ! empty( $updates->response[ $file ]->package ) ? 'disponible' : 'aucun fichier téléchargeable : licence absente ou expirée' )
+					: null,
 			);
 		}
 
@@ -118,7 +121,7 @@ class Upsidly_Agent_Tools_Diagnostics {
 	/**
 	 * Thèmes avec une mise à jour disponible.
 	 *
-	 * @return array<int, array{dossier: string, version: string, nouvelle_version: string}>
+	 * @return array<int, array{dossier: string, version: string, nouvelle_version: string, fichier: string}>
 	 */
 	private static function theme_updates() {
 		$updates = get_site_transient( 'update_themes' );
@@ -129,6 +132,7 @@ class Upsidly_Agent_Tools_Diagnostics {
 				'dossier'          => (string) $stylesheet,
 				'version'          => (string) $theme->get( 'Version' ),
 				'nouvelle_version' => (string) ( $data['new_version'] ?? '' ),
+				'fichier'          => ! empty( $data['package'] ) ? 'disponible' : 'aucun fichier téléchargeable : licence absente ou expirée',
 			);
 		}
 		return $list;

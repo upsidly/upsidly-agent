@@ -684,5 +684,56 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		$this->assertSame( 'applied', $result['actions'][0]['status'] );
 		$this->assertStringContainsString( "'ajax'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 	}
+
+	/**
+	 * Mise à jour premium sans fichier (licence absente) : refusée avec un message explicite.
+	 */
+	public function test_plugin_update_without_package_explains_license() {
+		if ( ! file_exists( WP_PLUGIN_DIR . '/hello.php' ) ) {
+			$this->markTestSkipped( 'Extension hello.php absente.' );
+		}
+		$fake = static function ( $transient ) {
+			$transient           = is_object( $transient ) ? $transient : new stdClass();
+			$transient->response = array(
+				'hello.php' => (object) array(
+					'slug'        => 'hello-dolly',
+					'plugin'      => 'hello.php',
+					'new_version' => '99.0',
+					'package'     => '',
+				),
+			);
+			return $transient;
+		};
+		add_filter( 'site_transient_update_plugins', $fake );
+		add_filter( 'pre_http_request', array( $this, 'block_http' ), 10, 3 );
+
+		$preview = Upsidly_Agent_Tool_Registry::preview( 'plugin_update', array( 'plugin' => 'hello.php' ) );
+
+		remove_filter( 'site_transient_update_plugins', $fake );
+		remove_filter( 'pre_http_request', array( $this, 'block_http' ), 10 );
+
+		$this->assertFalse( $preview['ok'] );
+		$this->assertStringContainsString( '99.0', $preview['error'] );
+		$this->assertStringContainsString( 'licence', $preview['error'] );
+		$this->assertStringContainsString( 'Rien n\'a été modifié', $preview['error'] );
+	}
+
+	/**
+	 * Bloque les appels réseau (vérification des mises à jour pendant le test).
+	 *
+	 * @return array
+	 */
+	public function block_http() {
+		return array(
+			'headers'  => array(),
+			'body'     => '{}',
+			'response' => array(
+				'code'    => 200,
+				'message' => 'OK',
+			),
+			'cookies'  => array(),
+			'filename' => null,
+		);
+	}
 }
 
