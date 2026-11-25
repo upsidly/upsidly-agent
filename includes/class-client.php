@@ -204,8 +204,8 @@ class Upsidly_Agent_Client {
 			return $body;
 		}
 
-		$error   = ( is_array( $body ) && isset( $body['error'] ) && is_array( $body['error'] ) ) ? $body['error'] : array();
-		$code    = isset( $error['code'] ) && is_string( $error['code'] ) ? $error['code'] : 'upsidly_agent_unexpected';
+		$error = ( is_array( $body ) && isset( $body['error'] ) && is_array( $body['error'] ) ) ? $body['error'] : array();
+		$code  = isset( $error['code'] ) && is_string( $error['code'] ) ? $error['code'] : 'upsidly_agent_unexpected';
 
 		// Réponse non JSON d'un intermédiaire (page d'erreur Cloudflare, passerelle…) : service indisponible.
 		if ( ! $error && $status >= 500 ) {
