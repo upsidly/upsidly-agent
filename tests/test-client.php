@@ -138,4 +138,30 @@ class Test_Upsidly_Agent_Client extends WP_UnitTestCase {
 		$this->assertSame( UPSIDLY_AGENT_VERSION, $headers['X-Upsidly-Plugin-Version'] );
 		$this->assertSame( 10, $captured['args']['timeout'] );
 	}
+
+	/**
+	 * Crédits de test épuisés : message dédié.
+	 */
+	public function test_quota_once_message() {
+		$error = Upsidly_Agent_Client::normalize(
+			array(
+				'status' => 402,
+				'body'   => array(
+					'error' => array(
+						'code'    => 'uap_quota_exceeded',
+						'message' => 'Crédits de test épuisés.',
+						'credits' => array(
+							'limit'     => 50,
+							'used'      => 50,
+							'remaining' => 0,
+							'resets_on' => null,
+							'period'    => 'once',
+						),
+					),
+				),
+			)
+		);
+		$this->assertSame( 'Vos crédits de test sont épuisés. Contactez Upsidly pour continuer.', $error->get_error_message() );
+	}
 }
+

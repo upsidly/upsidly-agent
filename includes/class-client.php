@@ -243,6 +243,9 @@ class Upsidly_Agent_Client {
 				return __( 'Cette clé est associée à un autre site.', 'upsidly-agent' );
 
 			case 'uap_quota_exceeded':
+				if ( is_array( $credits ) && 'once' === ( $credits['period'] ?? '' ) ) {
+					return __( 'Vos crédits de test sont épuisés. Contactez Upsidly pour continuer.', 'upsidly-agent' );
+				}
 				$resets = is_array( $credits ) && ! empty( $credits['resets_on'] ) ? (string) $credits['resets_on'] : '';
 				$time   = '' !== $resets ? strtotime( $resets . ' 00:00:00 UTC' ) : false;
 				return sprintf(

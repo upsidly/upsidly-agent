@@ -52,6 +52,14 @@ export default function CreditsGauge( { credits } ) {
 						limit.toLocaleString()
 					) }
 				</strong>
+				{ credits.period === 'once' && (
+					<span>
+						{ __(
+							'Crédits de test (non renouvelés)',
+							'upsidly-agent'
+						) }
+					</span>
+				) }
 				{ credits.resets_on && (
 					<span>
 						{ sprintf(
@@ -73,10 +81,15 @@ export default function CreditsGauge( { credits } ) {
 			</div>
 			{ level === 'full' && (
 				<p className="upsidly-agent-gauge__note">
-					{ __(
-						'Vos crédits du mois sont épuisés : la génération est désactivée jusqu’au renouvellement.',
-						'upsidly-agent'
-					) }
+					{ credits.period === 'once'
+						? __(
+								'Vos crédits de test sont épuisés : contactez Upsidly pour continuer.',
+								'upsidly-agent'
+							)
+						: __(
+								'Vos crédits du mois sont épuisés : la génération est désactivée jusqu’au renouvellement.',
+								'upsidly-agent'
+							) }
 				</p>
 			) }
 		</div>

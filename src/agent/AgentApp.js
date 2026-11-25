@@ -393,11 +393,16 @@ export default function AgentApp( { config } ) {
 							) }
 						</strong>
 						<span>
-							{ sprintf(
-								/* translators: %s: date de renouvellement. */
-								__( 'Renouvellement le %s', 'upsidly-agent' ),
-								credits.resets_on
-							) }
+							{ credits.period === 'once'
+								? __( 'Crédits de test', 'upsidly-agent' )
+								: sprintf(
+										/* translators: %s: date de renouvellement. */
+										__(
+											'Renouvellement le %s',
+											'upsidly-agent'
+										),
+										credits.resets_on
+									) }
 						</span>
 					</div>
 				) }

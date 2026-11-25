@@ -3,7 +3,7 @@
  * Plugin Name:       Upsidly Agent
  * Plugin URI:        https://github.com/upsidly/upsidly-agent
  * Description:       Assistant IA dans l'administration WordPress : rédige des articles et des pages en brouillon, prêts à relire.
- * Version:           0.4.0
+ * Version:           0.4.1
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Author:            Upsidly
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 if ( ! defined( 'UPSIDLY_AGENT_VERSION' ) ) {
-	define( 'UPSIDLY_AGENT_VERSION', '0.4.0' );
+	define( 'UPSIDLY_AGENT_VERSION', '0.4.1' );
 }
 
 if ( ! defined( 'UPSIDLY_AGENT_API_URL' ) ) {

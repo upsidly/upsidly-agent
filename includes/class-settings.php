@@ -288,6 +288,14 @@ class Upsidly_Agent_Settings {
 	 * @return string
 	 */
 	public static function connected_message( $status ) {
+		if ( 'once' === ( $status['credits']['period'] ?? '' ) ) {
+			return sprintf(
+				/* translators: 1: formule, 2: nombre de crédits restants. */
+				__( 'Connecté — formule %1$s, %2$s crédits de test restants', 'upsidly-agent' ),
+				isset( $status['site']['plan'] ) ? (string) $status['site']['plan'] : '?',
+				number_format_i18n( isset( $status['credits']['remaining'] ) ? (int) $status['credits']['remaining'] : 0 )
+			);
+		}
 		return sprintf(
 			/* translators: 1: formule, 2: nombre de crédits restants. */
 			__( 'Connecté — formule %1$s, %2$s crédits restants ce mois-ci', 'upsidly-agent' ),
