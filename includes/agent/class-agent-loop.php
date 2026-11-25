@@ -212,7 +212,12 @@ class Upsidly_Agent_Agent_Loop {
 				'credits' => isset( $conversation_info['credits_used'] ) ? (int) $conversation_info['credits_used'] : (int) $conversation['credits'],
 			)
 		);
-		delete_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT );
+		// Crédits à jour dans le statut en cache, sans perdre le niveau d'agent du site.
+		$cached = get_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT );
+		if ( is_array( $cached ) && isset( $response['credits'] ) && is_array( $response['credits'] ) ) {
+			$cached['credits'] = array_diff_key( $response['credits'], array( 'charged' => true ) );
+			set_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT, $cached, 5 * MINUTE_IN_SECONDS );
+		}
 
 		$result                 = self::response( $id, $status, $last_id );
 		$result['credits']      = $response['credits'] ?? null;
