@@ -23,7 +23,6 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		Upsidly_Agent_Agent_Store::create_tables();
-		update_option( 'upsidly_agent_key', 'upa_' . str_repeat( 'c', 40 ) );
 		$this->admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $this->admin );
 		add_filter(
@@ -79,7 +78,7 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Liaison : le code est échangé contre le secret et la clé, enregistrés pour l'administrateur courant.
+	 * Liaison : le code est échangé contre le secret, enregistré (chiffré) pour l'administrateur courant.
 	 */
 	public function test_claim_stores_secret_and_key() {
 		$captured = null;
@@ -116,7 +115,6 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 		$this->assertSame( 7, $link['site_id'] );
 		$this->assertSame( $this->admin, $link['user_id'] );
 		$this->assertSame( 'secret-partage-0123456789', $link['secret'] );
-		$this->assertSame( 'upa_' . str_repeat( 'd', 40 ), get_option( 'upsidly_agent_key' ) );
 		$this->assertStringNotContainsString( 'secret-partage', wp_json_encode( get_option( 'upsidly_agent_connector' ) ) );
 	}
 

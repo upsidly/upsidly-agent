@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Upsidly Agent
  * Plugin URI:        https://github.com/upsidly/upsidly-agent
- * Description:       Assistant IA dans l'administration WordPress : rédige des articles et des pages en brouillon, prêts à relire.
- * Version:           0.5.1
+ * Description:       Connecteur Upsidly : reliez ce site à votre tableau de bord upsidly.app pour y piloter l'agent IA et la rédaction. Aucun réglage dans WordPress.
+ * Version:           1.0.0
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Author:            Upsidly
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 if ( ! defined( 'UPSIDLY_AGENT_VERSION' ) ) {
-	define( 'UPSIDLY_AGENT_VERSION', '0.5.1' );
+	define( 'UPSIDLY_AGENT_VERSION', '1.0.0' );
 }
 
 if ( ! defined( 'UPSIDLY_AGENT_API_URL' ) ) {
@@ -29,8 +29,6 @@ if ( ! defined( 'UPSIDLY_AGENT_API_URL' ) ) {
 if ( ! defined( 'UPSIDLY_AGENT_DASHBOARD_URL' ) ) {
 	define( 'UPSIDLY_AGENT_DASHBOARD_URL', 'https://www.upsidly.app/fr/dashboard' );
 }
-
-// UPSIDLY_AGENT_KEY : optionnelle, à définir dans wp-config.php pour imposer la clé de site.
 
 define( 'UPSIDLY_AGENT_FILE', __FILE__ );
 define( 'UPSIDLY_AGENT_DIR', plugin_dir_path( __FILE__ ) );

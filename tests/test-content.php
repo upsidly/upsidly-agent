@@ -11,11 +11,18 @@
 class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 
 	/**
-	 * Faux client.
+	 * Résultat de la skill renvoyé par l'IA (simulé).
 	 *
-	 * @var Upsidly_Agent_Test_Fake_Client
+	 * @var array
 	 */
-	private $client;
+	private $raw = array();
+
+	/**
+	 * Entrées complétées par le site, telles qu'envoyées à l'IA (null si la demande est refusée avant).
+	 *
+	 * @var array|null
+	 */
+	private $sent_inputs = null;
 
 	/**
 	 * Préparation : type « temoignage » et taxonomie « secteur » sur mesure.
@@ -48,22 +55,12 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		);
 		Upsidly_Agent_Content_Types::reset();
 
-		update_option( 'upsidly_agent_key', 'upa_' . str_repeat( 'd', 40 ) );
-		$this->client               = new Upsidly_Agent_Test_Fake_Client();
-		Upsidly_Agent_Rest::$client = $this->client;
-
-		global $wp_rest_server;
-		$wp_rest_server = new WP_REST_Server();
-		do_action( 'rest_api_init', $wp_rest_server );
 	}
 
 	/**
 	 * Nettoyage.
 	 */
 	public function tear_down() {
-		global $wp_rest_server;
-		$wp_rest_server             = null;
-		Upsidly_Agent_Rest::$client = null;
 		unregister_taxonomy( 'secteur' );
 		unregister_post_type( 'temoignage' );
 		parent::tear_down();
@@ -76,20 +73,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 	 * @return array
 	 */
 	private static function run_response( array $result ) {
-		return array(
-			'status' => 200,
-			'body'   => array(
-				'skill'   => 'rediger-contenu',
-				'result'  => $result,
-				'credits' => array(
-					'limit'     => 1000,
-					'used'      => 20,
-					'remaining' => 980,
-					'resets_on' => '2026-12-01',
-					'charged'   => 6,
-				),
-			),
-		);
+		return $result;
 	}
 
 	/**
@@ -99,10 +83,26 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 	 * @return WP_REST_Response
 	 */
 	private function run_content( array $body ) {
-		$request = new WP_REST_Request( 'POST', '/upsidly-agent/v1/run' );
-		$request->set_header( 'Content-Type', 'application/json' );
-		$request->set_body( wp_json_encode( array( 'skill' => 'rediger-contenu' ) + $body ) );
-		return rest_do_request( $request );
+		$prepared          = Upsidly_Agent_Writer::prepare( (array) ( $body['inputs'] ?? array() ), (array) ( $body['terms'] ?? array() ), (string) ( $body['status'] ?? 'draft' ) );
+		$this->sent_inputs = is_wp_error( $prepared ) ? null : $prepared['inputs'];
+
+		$saved = Upsidly_Agent_Writer::save(
+			(array) ( $body['inputs'] ?? array() ),
+			(array) ( $body['terms'] ?? array() ),
+			(string) ( $body['status'] ?? 'draft' ),
+			$this->raw
+		);
+		if ( is_wp_error( $saved ) ) {
+			$data = (array) $saved->get_error_data();
+			return new WP_REST_Response(
+				array(
+					'code'    => $saved->get_error_code(),
+					'message' => $saved->get_error_message(),
+				),
+				(int) ( $data['status'] ?? 400 )
+			);
+		}
+		return new WP_REST_Response( $saved, 200 );
 	}
 
 	/**
@@ -156,7 +156,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			)
 		);
 
-		$this->client->responses['/v1/run'] = self::run_response(
+		$this->raw = self::run_response(
 			array(
 				'titre'            => 'Témoignage de Marie',
 				'slug'             => 'temoignage-marie',
@@ -201,7 +201,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$this->assertSame( 'rediger-contenu', get_post_meta( $post->ID, '_upsidly_agent_skill', true ) );
 
 		// Entrées envoyées au proxy : complétées côté serveur.
-		$sent = $this->client->requests[0]['body']['inputs'];
+		$sent = $this->sent_inputs;
 		$this->assertSame( 'Témoignage', $sent['type_libelle'] );
 		$this->assertStringContainsString( 'secteur (Secteurs, hiérarchique)', $sent['taxonomies'] );
 		$this->assertStringContainsString( 'déjà choisis par la personne (ne pas répéter) : Industrie', $sent['taxonomies'] );
@@ -214,7 +214,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 	 */
 	public function test_contributor_rights() {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'contributor' ) ) );
-		$this->client->responses['/v1/run'] = self::run_response(
+		$this->raw = self::run_response(
 			array(
 				'titre'            => 'Article',
 				'meta_description' => 'm',
@@ -239,7 +239,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		);
 		$this->assertSame( 403, $denied->get_status() );
 		$this->assertSame( 'upsidly_agent_publish', $denied->get_data()['code'] );
-		$this->assertSame( array(), $this->client->requests );
+		$this->assertNull( $this->sent_inputs );
 
 		$type_denied = $this->run_content(
 			array(
@@ -284,7 +284,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		register_taxonomy( 'pa_taille', 'product', array( 'hierarchical' => false ) );
 		wp_insert_term( 'S', 'pa_taille' );
 
-		$this->client->responses['/v1/run'] = self::run_response(
+		$this->raw = self::run_response(
 			array(
 				'titre'            => 'T-shirt Lin',
 				'slug'             => 't-shirt-lin',
@@ -361,7 +361,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$this->assertEquals( 30.0, (float) $prices['M']->get_sale_price() );
 		$this->assertSame( 4, (int) $prices['M']->get_stock_quantity() );
 
-		$this->assertStringContainsString( 'Taille', $this->client->requests[0]['body']['inputs']['attributs_existants'] );
+		$this->assertStringContainsString( 'Taille', $this->sent_inputs['attributs_existants'] );
 	}
 
 	/**
@@ -372,7 +372,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			$this->markTestSkipped( 'WooCommerce absent de l\'environnement de test.' );
 		}
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		$this->client->responses['/v1/run'] = self::run_response(
+		$this->raw = self::run_response(
 			array(
 				'titre'            => 'Mug',
 				'meta_description' => 'Mug.',
@@ -447,7 +447,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$fields = wp_list_pluck( Upsidly_Agent_Content_Types::custom_fields( 'temoignage' ), 'name' );
 		$this->assertSame( array( 'auteur', 'citation' ), $fields, 'Champs texte uniquement' );
 
-		$this->client->responses['/v1/run'] = self::run_response(
+		$this->raw = self::run_response(
 			array(
 				'titre'            => 'Témoignage',
 				'meta_description' => 'm',
@@ -471,6 +471,6 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$this->assertSame( 'Marie', get_field( 'auteur', $data['post_id'] ) );
 		$this->assertEmpty( get_post_meta( $data['post_id'], 'note', true ), 'Champ non texte ignoré' );
 		$this->assertStringContainsString( 'Champs à compléter : Citation', $data['result']['notes'] );
-		$this->assertStringContainsString( 'auteur (Auteur, texte court)', $this->client->requests[0]['body']['inputs']['champs'] );
+		$this->assertStringContainsString( 'auteur (Auteur, texte court)', $this->sent_inputs['champs'] );
 	}
 }

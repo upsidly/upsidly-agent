@@ -15,7 +15,7 @@ class Upsidly_Agent_Tools_Settings {
 	/**
 	 * Options jamais renvoyées, même masquées.
 	 */
-	const HIDDEN_OPTIONS = array( 'upsidly_agent_key', 'auth_key', 'auth_salt', 'secure_auth_key', 'secure_auth_salt', 'logged_in_key', 'logged_in_salt', 'nonce_key', 'nonce_salt' );
+	const HIDDEN_OPTIONS = array( 'upsidly_agent_key', 'upsidly_agent_connector', 'auth_key', 'auth_salt', 'secure_auth_key', 'secure_auth_salt', 'logged_in_key', 'logged_in_salt', 'nonce_key', 'nonce_salt' );
 
 	/**
 	 * Lit des options par nom ou par recherche.

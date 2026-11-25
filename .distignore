@@ -5,16 +5,10 @@
 /.wp-env.json
 /.phpunit.result.cache
 /.phpunit.cache
-/node_modules
-/src
 /tests
 /bin
 /dist
 /composer.json
 /composer.lock
-/package.json
-/package-lock.json
 /phpcs.xml.dist
 /phpunit.xml.dist
-/babel.config.js
-/eslint.config.cjs

@@ -252,6 +252,8 @@ class Upsidly_Agent_Guard {
 			'/\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}\b/' => self::MASK,
 			'/\bsk-[A-Za-z0-9_\-]{20,}\b/'         => self::MASK,
 			'/\bupa_[a-f0-9]{40}\b/'               => self::MASK,
+			// Secret chiffré du connecteur Upsidly (option upsidly_agent_connector).
+			'/\bs1:[A-Za-z0-9+\/=]{20,}/'          => self::MASK,
 			'/\bAKIA[0-9A-Z]{16}\b/'               => self::MASK,
 			'/\bgh[pousr]_[A-Za-z0-9]{30,}\b/'     => self::MASK,
 			'/\bxox[abposr]-[A-Za-z0-9\-]{10,}\b/' => self::MASK,

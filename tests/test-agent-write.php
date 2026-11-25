@@ -10,12 +10,7 @@
  */
 class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 
-	/**
-	 * Faux client.
-	 *
-	 * @var Upsidly_Agent_Test_Fake_Client
-	 */
-	private $client;
+	use Upsidly_Agent_Test_Connector_Actions;
 
 	/**
 	 * Dossier de test dans wp-content.
@@ -31,17 +26,10 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		parent::set_up();
 
 		Upsidly_Agent_Agent_Store::create_tables();
-		update_option( 'upsidly_agent_key', 'upa_' . str_repeat( 'e', 40 ) );
-		update_option( 'upsidly_agent_agent_enabled', '1' );
-		set_transient( 'upsidly_agent_status', array( 'agent' => array( 'level' => 'write' ) ), 300 );
-		get_role( 'administrator' )->add_cap( 'upsidly_agent_use' );
 
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $admin, 'upsidly_agent_ack', '1' );
 		wp_set_current_user( $admin );
 
-		$this->client                     = new Upsidly_Agent_Test_Fake_Client();
-		Upsidly_Agent_Agent_Loop::$client = $this->client;
 		add_filter(
 			'upsidly_agent_health_check',
 			static function () {
@@ -55,20 +43,14 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		$this->dir = WP_CONTENT_DIR . '/upsidly-agent-write-test';
 		wp_mkdir_p( $this->dir );
 		file_put_contents( $this->dir . '/a.php', "<?php\n// Bonjour\necho 'avant';\n" ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-
-		global $wp_rest_server;
-		$wp_rest_server = new WP_REST_Server();
-		do_action( 'rest_api_init', $wp_rest_server );
 	}
 
 	/**
 	 * Nettoyage.
 	 */
 	public function tear_down() {
-		global $wp_rest_server;
-		$wp_rest_server                   = null;
-		Upsidly_Agent_Agent_Loop::$client = null;
 		remove_all_filters( 'upsidly_agent_health_check' );
+		Upsidly_Agent_Tool_Registry::set_level( null );
 		foreach ( array_merge( (array) glob( $this->dir . '/sous/*' ), (array) glob( $this->dir . '/*' ) ) as $file ) {
 			if ( is_file( $file ) ) {
 				unlink( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions
@@ -82,119 +64,10 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		parent::tear_down();
 	}
 
-	/**
-	 * Appelle une route REST interne.
-	 *
-	 * @param string $method Méthode.
-	 * @param string $route  Route.
-	 * @param array  $body   Corps.
-	 * @return WP_REST_Response
-	 */
-	private function rest( $method, $route, array $body = array() ) {
-		$request = new WP_REST_Request( $method, '/upsidly-agent/v1' . $route );
-		if ( $body ) {
-			$request->set_header( 'Content-Type', 'application/json' );
-			$request->set_body( wp_json_encode( $body ) );
-		}
-		return rest_do_request( $request );
-	}
 
-	/**
-	 * Réponse du proxy demandant un outil.
-	 *
-	 * @param string $name  Outil.
-	 * @param array  $input Entrées.
-	 * @return array
-	 */
-	private static function tool_turn( $name, array $input ) {
-		return self::turn(
-			array(
-				array(
-					'type' => 'text',
-					'text' => 'Je propose une modification.',
-				),
-				array(
-					'type'  => 'tool_use',
-					'id'    => 'toolu_' . wp_generate_password( 8, false ),
-					'name'  => $name,
-					'input' => $input + array( 'raison' => 'Pour le test.' ),
-				),
-			)
-		);
-	}
 
-	/**
-	 * Réponse du proxy.
-	 *
-	 * @param array  $content Blocs.
-	 * @param string $stop    stop_reason.
-	 * @return array
-	 */
-	private static function turn( array $content, $stop = 'tool_use' ) {
-		return array(
-			'status' => 200,
-			'body'   => array(
-				'content'      => $content,
-				'stop_reason'  => $stop,
-				'credits'      => array(
-					'limit'     => 1000,
-					'used'      => 1,
-					'remaining' => 999,
-					'resets_on' => '2026-12-01',
-					'charged'   => 1,
-				),
-				'conversation' => array(
-					'credits_used' => 1,
-					'budget'       => 200,
-					'steps'        => 1,
-					'max_steps'    => 40,
-				),
-			),
-		);
-	}
 
-	/**
-	 * Démarre une conversation et exécute la première étape (proposition de l'agent).
-	 *
-	 * @param string $name  Outil.
-	 * @param array  $input Entrées.
-	 * @return array{id: string, step: array, action: array|null}
-	 */
-	private function propose( $name, array $input ) {
-		$this->client->queue['/v1/agent/turn'] = array(
-			self::tool_turn( $name, $input ),
-			self::turn(
-				array(
-					array(
-						'type' => 'text',
-						'text' => 'Terminé.',
-					),
-				),
-				'end_turn'
-			),
-		);
-		$id   = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Fais la modification' ) )->get_data()['conversation']['id'];
-		$step = $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data();
-		$step = $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data();
 
-		return array(
-			'id'     => $id,
-			'step'   => $step,
-			'action' => $step['actions'][0] ?? null,
-		);
-	}
-
-	/**
-	 * Résultat d'outil envoyé au proxy à l'étape suivant la décision.
-	 *
-	 * @return array
-	 */
-	private function last_tool_result() {
-		$request = end( $this->client->requests );
-		$history = $request['body']['messages'];
-		$last    = end( $history );
-		return $last['content'][0];
-	}
 
 	/**
 	 * edit_file : attente, aperçu, rien d'écrit ; validation → écrit, sauvegardé ; annulation → restauré.
@@ -209,16 +82,14 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( 'awaiting', $proposal['step']['status'] );
+		$this->assertTrue( $proposal['step']['pending'] );
 		$this->assertSame( 'pending', $proposal['action']['status'] );
 		$this->assertSame( 'Pour le test.', $proposal['action']['reason'] );
 		$this->assertStringContainsString( 'upsidly-agent-write-test/a.php', $proposal['action']['title'] );
 		$this->assertStringContainsString( 'diff', $proposal['action']['preview'] );
 		$this->assertStringContainsString( "'avant'", file_get_contents( $this->dir . '/a.php' ), 'Rien d\'écrit avant validation' ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-		$this->assertCount( 1, $this->client->requests, 'Le proxy n\'est pas rappelé tant que la personne n\'a pas décidé' );
 
 		$decision = $this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/decide", array( 'decision' => 'approve' ) )->get_data();
-		$this->assertSame( 'running', $decision['status'] );
 		$this->assertSame( 'applied', $decision['actions'][0]['status'] );
 		$this->assertTrue( $decision['actions'][0]['can_undo'] );
 		$this->assertStringContainsString( "'après'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
@@ -279,7 +150,7 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 			)
 		);
 
-		$this->assertSame( 'idle', $proposal['step']['status'], 'Pas d\'attente : l\'erreur est renvoyée à l\'agent' );
+		$this->assertFalse( $proposal['step']['pending'], 'Pas d\'attente : l\'erreur est renvoyée à l\'agent' );
 		$this->assertSame( 'failed', $proposal['action']['status'] );
 		$this->assertStringContainsString( 'syntaxe', $proposal['action']['result'] );
 		$this->assertStringContainsString( "'avant'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
@@ -321,7 +192,8 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 	 * Niveau d'agent en lecture seule : écriture refusée sans attente.
 	 */
 	public function test_writes_not_allowed_in_read_level() {
-		set_transient( 'upsidly_agent_status', array( 'agent' => array( 'level' => 'read' ) ), 300 );
+		$this->level = 'read';
+		Upsidly_Agent_Tool_Registry::set_level( 'read' );
 		$proposal = $this->propose(
 			'edit_file',
 			array(
@@ -539,7 +411,7 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 					'status'      => 'pending',
 				)
 			);
-			Upsidly_Agent_Agent_Loop::decide( $action_id, 'approve' );
+			Upsidly_Agent_Actions::decide( $action_id, 'approve' );
 		}
 		$this->assertSame( 'C', get_option( 'blogdescription' ) );
 
@@ -548,23 +420,6 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		$this->assertSame( 'A', get_option( 'blogdescription' ) );
 	}
 
-	/**
-	 * Une autre personne ne peut pas décider d'une action.
-	 */
-	public function test_decide_requires_owner() {
-		$proposal = $this->propose(
-			'edit_file',
-			array(
-				'path'     => 'upsidly-agent-write-test/a.php',
-				'old_text' => "echo 'avant';",
-				'new_text' => "echo 'x';",
-			)
-		);
-		$other = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $other );
-		$this->assertSame( 403, $this->rest( 'POST', "/agent/actions/{$proposal['action']['id']}/decide", array( 'decision' => 'approve' ) )->get_status() );
-		$this->assertStringContainsString( "'avant'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-	}
 
 	/**
 	 * save_term : création puis annulation, modification puis annulation ; doublon et droits refusés.
@@ -661,29 +516,6 @@ class Test_Upsidly_Agent_Agent_Write extends WP_UnitTestCase {
 		$this->assertFalse( $bad['ok'] );
 	}
 
-	/**
-	 * Décision via admin-ajax : propriétaire uniquement, décision validée.
-	 */
-	public function test_ajax_decide() {
-		$proposal = $this->propose(
-			'edit_file',
-			array(
-				'path'     => 'upsidly-agent-write-test/a.php',
-				'old_text' => "echo 'avant';",
-				'new_text' => "echo 'ajax';",
-			)
-		);
-		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_decide_result( $proposal['action']['id'], 'peut-etre', '' ) );
-
-		$owner = get_current_user_id();
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_decide_result( $proposal['action']['id'], 'approve', '' ) );
-
-		wp_set_current_user( $owner );
-		$result = Upsidly_Agent_Agent_Rest::ajax_decide_result( $proposal['action']['id'], 'approve', '' );
-		$this->assertSame( 'applied', $result['actions'][0]['status'] );
-		$this->assertStringContainsString( "'ajax'", file_get_contents( $this->dir . '/a.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
-	}
 
 	/**
 	 * Mise à jour premium sans fichier (licence absente) : refusée avec un message explicite.

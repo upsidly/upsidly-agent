@@ -11,13 +11,6 @@
 class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 
 	/**
-	 * Faux client.
-	 *
-	 * @var Upsidly_Agent_Test_Fake_Client
-	 */
-	private $client;
-
-	/**
 	 * Administrateur.
 	 *
 	 * @var int
@@ -31,80 +24,22 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 		parent::set_up();
 
 		Upsidly_Agent_Agent_Store::create_tables();
-		update_option( 'upsidly_agent_key', 'upa_' . str_repeat( 'c', 40 ) );
-		update_option( 'upsidly_agent_agent_enabled', '1' );
-		get_role( 'administrator' )->add_cap( 'upsidly_agent_use' );
 
 		$this->admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $this->admin, 'upsidly_agent_ack', '2026-11-25 00:00:00' );
 		wp_set_current_user( $this->admin );
 
-		$this->client                     = new Upsidly_Agent_Test_Fake_Client();
-		Upsidly_Agent_Agent_Loop::$client = $this->client;
 		add_filter( 'upsidly_agent_sql_read_only_transaction', '__return_false' );
-
-		global $wp_rest_server;
-		$wp_rest_server = new WP_REST_Server();
-		do_action( 'rest_api_init', $wp_rest_server );
 	}
 
 	/**
 	 * Nettoyage.
 	 */
 	public function tear_down() {
-		global $wp_rest_server;
-		$wp_rest_server                   = null;
-		Upsidly_Agent_Agent_Loop::$client = null;
 		remove_all_filters( 'upsidly_agent_sql_read_only_transaction' );
 		parent::tear_down();
 	}
 
-	/**
-	 * Appelle une route REST interne.
-	 *
-	 * @param string $method Méthode.
-	 * @param string $route  Route.
-	 * @param array  $body   Corps.
-	 * @return WP_REST_Response
-	 */
-	private function rest( $method, $route, array $body = array() ) {
-		$request = new WP_REST_Request( $method, '/upsidly-agent/v1' . $route );
-		if ( $body ) {
-			$request->set_header( 'Content-Type', 'application/json' );
-			$request->set_body( wp_json_encode( $body ) );
-		}
-		return rest_do_request( $request );
-	}
 
-	/**
-	 * Réponse du proxy pour une étape.
-	 *
-	 * @param array  $content Blocs.
-	 * @param string $stop    stop_reason.
-	 * @return array
-	 */
-	private static function turn( array $content, $stop = 'tool_use' ) {
-		return array(
-			'status' => 200,
-			'body'   => array(
-				'content'      => $content,
-				'stop_reason'  => $stop,
-				'credits'      => array(
-					'limit'     => 1000,
-					'used'      => 10,
-					'remaining' => 990,
-					'resets_on' => '2026-12-01',
-					'charged'   => 2,
-				),
-				'conversation' => array(
-					'credits_used' => 4,
-					'budget'       => 200,
-					'steps'        => 2,
-					'max_steps'    => 40,
-				),
-			),
-		);
-	}
 
 	/**
 	 * Chemins : wp-content uniquement, fichiers sensibles refusés.
@@ -173,8 +108,11 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 		$this->assertSame( 'Bonjour', $value['titre'] );
 		$this->assertSame( 'mon_reglage', $value['meta_key'] );
 
-		$options = Upsidly_Agent_Tools_Settings::get_options( array( 'names' => array( 'blogname', 'upsidly_agent_key', 'admin_email' ) ) );
-		$this->assertStringNotContainsString( str_repeat( 'c', 40 ), $options );
+		update_option( 'upsidly_agent_connector', array( 'secret' => 's1:secret-chiffre-zzz' ) );
+		$options = Upsidly_Agent_Tools_Settings::get_options( array( 'names' => array( 'blogname', 'upsidly_agent_connector', 'admin_email' ) ) );
+		$this->assertStringNotContainsString( 'secret-chiffre-zzz', $options );
+		$stored = Upsidly_Agent_Connector::encrypt( 'secret' );
+		$this->assertStringNotContainsString( substr( $stored, 3, 20 ), Upsidly_Agent_Guard::redact_text( 'option_value: a:1:{s:6:"secret";s:60:"' . $stored . '";}' ) );
 		$this->assertStringNotContainsString( get_option( 'admin_email' ), $options );
 		$this->assertStringContainsString( get_option( 'blogname' ), $options );
 	}
@@ -220,154 +158,9 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 		$this->assertLessThan( 20300, mb_strlen( $long ) );
 	}
 
-	/**
-	 * Boucle : outil de lecture exécuté, résultat renvoyé au proxy, conversation terminée.
-	 */
-	public function test_loop_runs_tools_and_finishes() {
-		$this->client->queue['/v1/agent/turn'] = array(
-			self::turn(
-				array(
-					array(
-						'type' => 'text',
-						'text' => 'Je regarde.',
-					),
-					array(
-						'type'  => 'tool_use',
-						'id'    => 'toolu_1',
-						'name'  => 'site_overview',
-						'input' => array(),
-					),
-				)
-			),
-			self::turn(
-				array(
-					array(
-						'type' => 'text',
-						'text' => 'Tout va bien.',
-					),
-				),
-				'end_turn'
-			),
-		);
 
-		$created = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Mon site va bien ?' ) );
-		$this->assertSame( 200, $created->get_status(), wp_json_encode( $created->get_data() ) );
-		$id = $created->get_data()['conversation']['id'];
-		$this->assertMatchesRegularExpression( '/^[a-z0-9]{26}$/', $id );
 
-		$step1 = $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data();
-		$this->assertSame( 'running', $step1['status'] );
-		$this->assertSame( 'assistant', end( $step1['messages'] )['role'] );
 
-		$step2 = $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data();
-		$this->assertSame( 'idle', $step2['status'] );
-
-		// Deuxième appel au proxy : l'historique contient le résultat de site_overview.
-		$sent    = $this->client->requests[1]['body'];
-		$history = $sent['messages'];
-		$this->assertSame( 'user', $history[2]['role'] );
-		$this->assertSame( 'tool_result', $history[2]['content'][0]['type'] );
-		$this->assertSame( 'toolu_1', $history[2]['content'][0]['tool_use_id'] );
-		$this->assertStringContainsString( 'prefixe_tables', $history[2]['content'][0]['content'] );
-		$this->assertSame( $id, $sent['conversation_id'] );
-		$this->assertArrayHasKey( 'file_edit_allowed', $sent['environment'] );
-		$this->assertStringNotContainsString( str_repeat( 'c', 40 ), wp_json_encode( $sent ) );
-
-		$conversation = Upsidly_Agent_Agent_Store::get( $id );
-		$this->assertSame( 'idle', $conversation['status'] );
-		$this->assertSame( '4', (string) $conversation['credits'] );
-
-		$this->assertSame( 'idle', $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data()['status'] );
-	}
-
-	/**
-	 * Arrêt puis nouveau message : demandes d'outils closes, historique valide.
-	 */
-	public function test_stop_then_new_message() {
-		$this->client->queue['/v1/agent/turn'] = array(
-			self::turn(
-				array(
-					array(
-						'type'  => 'tool_use',
-						'id'    => 'toolu_9',
-						'name'  => 'read_logs',
-						'input' => array(),
-					),
-				)
-			),
-		);
-
-		$id = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Erreur ?' ) )->get_data()['conversation']['id'];
-		$this->rest( 'POST', "/agent/conversations/{$id}/step" );
-		$this->assertSame( 'stopped', $this->rest( 'POST', "/agent/conversations/{$id}/stop" )->get_data()['status'] );
-		$this->assertSame( 'stopped', $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data()['status'] );
-
-		$this->rest( 'POST', "/agent/conversations/{$id}/messages", array( 'message' => 'Autre chose' ) );
-		$messages = Upsidly_Agent_Agent_Store::messages( $id );
-		$last     = end( $messages );
-
-		$this->assertSame( 'user', $last['role'] );
-		$this->assertSame( 'tool_result', $last['content'][0]['type'] );
-		$this->assertTrue( $last['content'][0]['is_error'] );
-		$this->assertSame( 'Autre chose', $last['content'][1]['text'] );
-		$this->assertSame( 'running', Upsidly_Agent_Agent_Store::get( $id )['status'] );
-	}
-
-	/**
-	 * Erreur du proxy : statut error, message traduit, historique intact.
-	 */
-	public function test_proxy_error() {
-		$this->client->queue['/v1/agent/turn'] = array(
-			array(
-				'status' => 403,
-				'body'   => array(
-					'error' => array(
-						'code'    => 'uap_agent_disabled',
-						'message' => 'Agent désactivé.',
-					),
-				),
-			),
-		);
-
-		$id   = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Bonjour' ) )->get_data()['conversation']['id'];
-		$step = $this->rest( 'POST', "/agent/conversations/{$id}/step" )->get_data();
-
-		$this->assertSame( 'error', $step['status'] );
-		$this->assertSame( 'uap_agent_disabled', $step['error']['code'] );
-		$this->assertStringContainsString( 'pas activé', $step['error']['message'] );
-		$this->assertCount( 1, Upsidly_Agent_Agent_Store::messages( $id ) );
-	}
-
-	/**
-	 * Accès : capacité, réglage du site, avertissement, propriétaire de la conversation.
-	 */
-	public function test_access_rules() {
-		$id = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Bonjour' ) )->get_data()['conversation']['id'];
-
-		// Autre administrateur : pas d'accès à la conversation.
-		$other = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		update_user_meta( $other, 'upsidly_agent_ack', '1' );
-		wp_set_current_user( $other );
-		$this->assertSame( 403, $this->rest( 'GET', "/agent/conversations/{$id}" )->get_status() );
-
-		// Éditeur : pas de capacité.
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'editor' ) ) );
-		$this->assertSame( 403, $this->rest( 'GET', '/agent/conversations' )->get_status() );
-
-		// Agent désactivé sur le site.
-		wp_set_current_user( $this->admin );
-		update_option( 'upsidly_agent_agent_enabled', '0' );
-		$this->assertSame( 403, $this->rest( 'GET', '/agent/conversations' )->get_status() );
-		update_option( 'upsidly_agent_agent_enabled', '1' );
-
-		// Avertissement non accepté.
-		delete_user_meta( $this->admin, 'upsidly_agent_ack' );
-		$response = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Bonjour' ) );
-		$this->assertSame( 403, $response->get_status() );
-		$this->assertSame( 'upsidly_agent_ack', $response->get_data()['code'] );
-		$this->assertSame( 200, $this->rest( 'POST', '/agent/ack' )->get_status() );
-		$this->assertSame( 200, $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Bonjour' ) )->get_status() );
-	}
 
 	/**
 	 * Purge : conversations de plus de 90 jours supprimées.
@@ -387,48 +180,21 @@ class Test_Upsidly_Agent_Agent extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Les données injectées dans la page Agent ne contiennent jamais la clé.
+	 * Le secret du connecteur n'apparaît jamais dans les données renvoyées à Upsidly.
 	 */
-	public function test_agent_data_never_contains_key() {
-		$json = wp_json_encode( Upsidly_Agent_Admin::agent_data() );
-		$this->assertStringNotContainsString( str_repeat( 'c', 40 ), $json );
-		$this->assertStringNotContainsString( 'upa_', $json );
-	}
-
-	/**
-	 * Agent activé par défaut (option absente).
-	 */
-	public function test_agent_enabled_by_default() {
-		delete_option( 'upsidly_agent_agent_enabled' );
-		$this->assertTrue( Upsidly_Agent_Settings::agent_enabled() );
-		update_option( 'upsidly_agent_agent_enabled', '0' );
-		$this->assertFalse( Upsidly_Agent_Settings::agent_enabled() );
-	}
-
-	/**
-	 * Étape via admin-ajax : droits identiques à l'API REST.
-	 */
-	public function test_ajax_step_access() {
-		$this->client->queue['/v1/agent/turn'] = array(
-			self::turn(
-				array(
-					array(
-						'type' => 'text',
-						'text' => 'Bonjour.',
-					),
-				),
-				'end_turn'
-			),
+	public function test_ping_never_contains_secret() {
+		update_option(
+			'upsidly_agent_connector',
+			array(
+				'site_id'   => 1,
+				'user_id'   => $this->admin,
+				'linked_at' => time(),
+				'secret'    => Upsidly_Agent_Connector::encrypt( 'secret-tres-confidentiel-123' ),
+			)
 		);
-		$id = $this->rest( 'POST', '/agent/conversations', array( 'message' => 'Bonjour' ) )->get_data()['conversation']['id'];
-
-		$result = Upsidly_Agent_Agent_Rest::ajax_step_result( $id );
-		$this->assertIsArray( $result );
-		$this->assertSame( 'idle', $result['status'] );
-
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_step_result( $id ) );
-		$this->assertWPError( Upsidly_Agent_Agent_Rest::ajax_step_result( '../etc' ) );
+		$json = wp_json_encode( Upsidly_Agent_Connector::dispatch( array( 'op' => 'ping' ) ) );
+		$this->assertStringNotContainsString( 'secret-tres-confidentiel', $json );
+		$this->assertStringNotContainsString( 'upsidly_agent_connector', $json );
 	}
 }
 

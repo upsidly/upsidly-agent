@@ -19,13 +19,14 @@ defined( 'ABSPATH' ) || exit;
  */
 class Upsidly_Agent_Connector {
 
-	const OPTION       = 'upsidly_agent_connector';
-	const AJAX_ACTION  = 'upsidly_connector';
-	const MAX_SKEW     = 300;
-	const MAX_BODY     = 4194304;
-	const STATE_PREFIX = 'upsidly_agent_link_state_';
-	const NONCE_PREFIX = 'upsidly_agent_cn_';
-	const OPS          = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all' );
+	const OPTION        = 'upsidly_agent_connector';
+	const AJAX_ACTION   = 'upsidly_connector';
+	const MAX_SKEW      = 300;
+	const MAX_BODY      = 4194304;
+	const STATE_PREFIX  = 'upsidly_agent_link_state_';
+	const NONCE_PREFIX  = 'upsidly_agent_cn_';
+	const OPS           = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all', 'actions.stop', 'content.catalog', 'content.prepare', 'content.save' );
+	const NOTICE_PREFIX = 'upsidly_agent_notice_';
 
 	/**
 	 * Administrateur au nom duquel s'exécute une demande signée valide (0 sinon).
@@ -55,6 +56,9 @@ class Upsidly_Agent_Connector {
 		add_action( 'admin_post_upsidly_agent_link', array( __CLASS__, 'start_link' ) );
 		add_action( 'admin_post_upsidly_agent_link_return', array( __CLASS__, 'finish_link' ) );
 		add_action( 'admin_post_upsidly_agent_unlink', array( __CLASS__, 'unlink' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'admin_notices' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( UPSIDLY_AGENT_FILE ), array( __CLASS__, 'action_links' ) );
+		add_filter( 'plugin_row_meta', array( __CLASS__, 'row_meta' ), 10, 2 );
 
 		if ( self::is_connector_request() ) {
 			// Après le chargement des extensions : wp_salt(), get_userdata() (pluggable.php) sont alors définies,
@@ -190,14 +194,10 @@ class Upsidly_Agent_Connector {
 			return new WP_Error( 'upsidly_agent_link', __( 'Impossible de joindre Upsidly. Réessayez dans un instant.', 'upsidly-agent' ) );
 		}
 		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		if ( 200 !== (int) wp_remote_retrieve_response_code( $response ) || ! is_array( $body ) || empty( $body['secret'] ) || empty( $body['key'] ) ) {
+		if ( 200 !== (int) wp_remote_retrieve_response_code( $response ) || ! is_array( $body ) || ! is_string( $body['secret'] ?? null ) || strlen( $body['secret'] ) < 32 ) {
 			$message = is_array( $body ) && isset( $body['error']['message'] ) ? (string) $body['error']['message'] : __( 'Liaison refusée par Upsidly.', 'upsidly-agent' );
 			return new WP_Error( 'upsidly_agent_link', $message );
 		}
-		if ( ! preg_match( Upsidly_Agent_Settings::KEY_PATTERN, (string) $body['key'] ) ) {
-			return new WP_Error( 'upsidly_agent_link', __( 'Réponse d\'Upsidly inattendue.', 'upsidly-agent' ) );
-		}
-
 		update_option(
 			self::OPTION,
 			array(
@@ -208,17 +208,11 @@ class Upsidly_Agent_Connector {
 			),
 			false
 		);
-		if ( ! Upsidly_Agent_Settings::key_is_constant() ) {
-			update_option( Upsidly_Agent_Settings::OPTION_KEY, (string) $body['key'], false );
-		}
-		delete_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT );
-		Upsidly_Agent_Settings::connect_now();
-
 		return true;
 	}
 
 	/**
-	 * Délier le site (le secret est oublié ; la clé reste).
+	 * Délier le site (le secret est oublié).
 	 */
 	public static function unlink() {
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -237,15 +231,107 @@ class Upsidly_Agent_Connector {
 	 */
 	private static function notice( $type, $message ) {
 		set_transient(
-			'upsidly_agent_notice_' . get_current_user_id(),
+			self::NOTICE_PREFIX . get_current_user_id(),
 			array(
 				'type'    => $type,
 				'message' => $message,
 			),
 			60
 		);
-		wp_safe_redirect( Upsidly_Agent_Settings::page_url() );
+		wp_safe_redirect( admin_url( 'plugins.php' ) );
 		exit;
+	}
+
+	// Interface minimale : liens de l'extension et notices (aucune page de réglages).
+
+	/**
+	 * Formulaire « Relier à Upsidly » ou « Délier » (un bouton, POST + nonce).
+	 *
+	 * @param bool $primary Bouton principal.
+	 * @return string HTML.
+	 */
+	private static function link_form( $primary = true ) {
+		$linked = self::is_linked();
+		$action = $linked ? 'upsidly_agent_unlink' : 'upsidly_agent_link';
+		$label  = $linked ? __( 'Délier', 'upsidly-agent' ) : __( 'Relier à Upsidly', 'upsidly-agent' );
+		$class  = $linked ? 'button-link button-link-delete' : ( $primary ? 'button button-primary' : 'button-link' );
+		$extra  = $linked ? ' onsubmit="return confirm(\'' . esc_js( __( 'Délier ce site ? Upsidly ne pourra plus agir dessus depuis le tableau de bord.', 'upsidly-agent' ) ) . '\');"' : '';
+
+		return '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline"' . $extra . '>'
+			. '<input type="hidden" name="action" value="' . esc_attr( $action ) . '" />'
+			. wp_nonce_field( $action, '_wpnonce', true, false )
+			. '<button type="submit" class="' . esc_attr( $class ) . '">' . esc_html( $label ) . '</button></form>';
+	}
+
+	/**
+	 * Liens de l'extension (page Extensions) : tableau de bord, relier ou délier.
+	 *
+	 * @param array $links Liens.
+	 * @return array
+	 */
+	public static function action_links( $links ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return $links;
+		}
+		if ( self::is_linked() ) {
+			array_unshift( $links, '<a href="' . esc_url( self::dashboard_url() ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Tableau de bord', 'upsidly-agent' ) . '</a>' );
+		}
+		$links[] = self::link_form( false );
+		return $links;
+	}
+
+	/**
+	 * État de la liaison sous la description de l'extension.
+	 *
+	 * @param array  $meta Métadonnées.
+	 * @param string $file Extension.
+	 * @return array
+	 */
+	public static function row_meta( $meta, $file ) {
+		if ( plugin_basename( UPSIDLY_AGENT_FILE ) !== $file || ! current_user_can( 'manage_options' ) ) {
+			return $meta;
+		}
+		$link = self::get();
+		if ( null === $link ) {
+			$meta[] = '<strong>' . esc_html__( 'Site non relié à Upsidly', 'upsidly-agent' ) . '</strong>';
+		} else {
+			$user   = get_userdata( $link['user_id'] );
+			$meta[] = esc_html(
+				sprintf(
+					/* translators: 1: date, 2: identifiant de l'administrateur. */
+					__( 'Relié le %1$s par %2$s', 'upsidly-agent' ),
+					wp_date( get_option( 'date_format' ), $link['linked_at'] ),
+					$user ? $user->user_login : '?'
+				)
+			);
+		}
+		return $meta;
+	}
+
+	/**
+	 * Notices : résultat d'une liaison ; invitation à relier le site (pages Extensions et Tableau de bord).
+	 */
+	public static function admin_notices() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		$notice = get_transient( self::NOTICE_PREFIX . get_current_user_id() );
+		if ( is_array( $notice ) && isset( $notice['message'] ) ) {
+			delete_transient( self::NOTICE_PREFIX . get_current_user_id() );
+			printf(
+				'<div class="notice notice-%1$s is-dismissible"><p>%2$s</p></div>',
+				'success' === $notice['type'] ? 'success' : 'error',
+				esc_html( $notice['message'] )
+			);
+		}
+
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( self::is_linked() || ! $screen || ! in_array( $screen->id, array( 'plugins', 'dashboard' ), true ) ) {
+			return;
+		}
+		echo '<div class="notice notice-info"><p><strong>' . esc_html__( 'Upsidly Agent', 'upsidly-agent' ) . '</strong> — '
+			. esc_html__( 'Reliez ce site à votre compte Upsidly pour piloter l\'agent IA et la rédaction depuis votre tableau de bord upsidly.app. Aucune clé à copier.', 'upsidly-agent' )
+			. '</p><p>' . self::link_form() . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- formulaire échappé dans link_form().
 	}
 
 	// Demandes signées.
@@ -422,7 +508,7 @@ class Upsidly_Agent_Connector {
 					}
 				}
 				Upsidly_Agent_Agent_Store::ensure( $id, get_current_user_id(), (string) ( $payload['title'] ?? '' ) );
-				Upsidly_Agent_Agent_Loop::register_actions( $id, $uses );
+				Upsidly_Agent_Actions::register_actions( $id, $uses );
 				return self::state( $id, $uses );
 
 			case 'actions.list':
@@ -437,14 +523,28 @@ class Upsidly_Agent_Connector {
 				if ( ! in_array( $decision, array( 'approve', 'reject' ), true ) ) {
 					return new WP_Error( 'bad_request', 'Décision invalide.', array( 'status' => 400 ) );
 				}
-				return Upsidly_Agent_Agent_Loop::decide( absint( $payload['action_id'] ?? 0 ), $decision, (string) ( $payload['comment'] ?? '' ) );
+				return Upsidly_Agent_Actions::decide( absint( $payload['action_id'] ?? 0 ), $decision, (string) ( $payload['comment'] ?? '' ) );
 
 			case 'actions.undo':
-				return Upsidly_Agent_Agent_Loop::undo( absint( $payload['action_id'] ?? 0 ) );
+				return Upsidly_Agent_Actions::undo( absint( $payload['action_id'] ?? 0 ) );
+
+			case 'content.catalog':
+				return Upsidly_Agent_Writer::catalog();
+
+			case 'content.prepare':
+				$prepared = Upsidly_Agent_Writer::prepare( (array) ( $payload['inputs'] ?? array() ), (array) ( $payload['terms'] ?? array() ), (string) ( $payload['status'] ?? 'draft' ) );
+				return is_wp_error( $prepared ) ? $prepared : $prepared + array( 'context' => Upsidly_Agent_Writer::context() );
+
+			case 'content.save':
+				return Upsidly_Agent_Writer::save( (array) ( $payload['inputs'] ?? array() ), (array) ( $payload['terms'] ?? array() ), (string) ( $payload['status'] ?? 'draft' ), (array) ( $payload['result'] ?? array() ) );
+
+			case 'actions.stop':
+				$id = self::conversation_id( $payload );
+				return is_wp_error( $id ) ? $id : Upsidly_Agent_Actions::stop( $id, (string) ( $payload['reason'] ?? '' ) );
 
 			case 'actions.undo_all':
 				$id = self::conversation_id( $payload );
-				return is_wp_error( $id ) ? $id : Upsidly_Agent_Agent_Loop::undo_all( $id );
+				return is_wp_error( $id ) ? $id : Upsidly_Agent_Actions::undo_all( $id );
 		}
 
 		return new WP_Error( 'bad_request', 'Opération inconnue.', array( 'status' => 400 ) );
@@ -458,11 +558,11 @@ class Upsidly_Agent_Connector {
 	 * @return array{actions: array, pending: bool, results: array}
 	 */
 	private static function state( $id, array $uses ) {
-		$pending = Upsidly_Agent_Agent_Loop::has_pending( $id );
+		$pending = Upsidly_Agent_Actions::has_pending( $id );
 		return array(
-			'actions' => Upsidly_Agent_Agent_Loop::actions_payload( $id ),
+			'actions' => Upsidly_Agent_Actions::actions_payload( $id ),
 			'pending' => $pending,
-			'results' => $pending ? array() : Upsidly_Agent_Agent_Loop::results_for( $id, self::as_tool_uses( $uses ) ),
+			'results' => $pending ? array() : Upsidly_Agent_Actions::results_for( $id, self::as_tool_uses( $uses ) ),
 		);
 	}
 

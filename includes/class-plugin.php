@@ -8,7 +8,7 @@
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Point d'entrée du plugin.
+ * Point d'entrée du plugin : un connecteur entre le site et le tableau de bord Upsidly (upsidly.app).
  */
 final class Upsidly_Agent_Plugin {
 
@@ -25,9 +25,6 @@ final class Upsidly_Agent_Plugin {
 	 * @var array<string, string>
 	 */
 	const CLASSES = array(
-		'class-settings.php'                      => 'Upsidly_Agent_Settings',
-		'class-client.php'                        => 'Upsidly_Agent_Client',
-		'class-fake-proxy.php'                    => 'Upsidly_Agent_Fake_Proxy',
 		'class-environment.php'                   => 'Upsidly_Agent_Environment',
 		'class-sanitizer.php'                     => 'Upsidly_Agent_Sanitizer',
 		'class-seo.php'                           => 'Upsidly_Agent_Seo',
@@ -35,10 +32,7 @@ final class Upsidly_Agent_Plugin {
 		'class-content-types.php'                 => 'Upsidly_Agent_Content_Types',
 		'class-products.php'                      => 'Upsidly_Agent_Products',
 		'class-drafts.php'                        => 'Upsidly_Agent_Drafts',
-		'class-rest.php'                          => 'Upsidly_Agent_Rest',
-		'class-heartbeat.php'                     => 'Upsidly_Agent_Heartbeat',
-		'class-admin.php'                         => 'Upsidly_Agent_Admin',
-		'class-connector.php'                     => 'Upsidly_Agent_Connector',
+		'class-writer.php'                        => 'Upsidly_Agent_Writer',
 		'agent/class-guard.php'                   => 'Upsidly_Agent_Guard',
 		'agent/class-agent-store.php'             => 'Upsidly_Agent_Agent_Store',
 		'agent/class-tool-registry.php'           => 'Upsidly_Agent_Tool_Registry',
@@ -51,16 +45,21 @@ final class Upsidly_Agent_Plugin {
 		'agent/tools/class-tools-settings.php'    => 'Upsidly_Agent_Tools_Settings',
 		'agent/tools/class-tools-content.php'     => 'Upsidly_Agent_Tools_Content',
 		'agent/tools/class-tools-database.php'    => 'Upsidly_Agent_Tools_Database',
-		'agent/class-agent-loop.php'              => 'Upsidly_Agent_Agent_Loop',
-		'agent/class-agent-rest.php'              => 'Upsidly_Agent_Agent_Rest',
+		'agent/class-actions.php'                 => 'Upsidly_Agent_Actions',
+		'class-connector.php'                     => 'Upsidly_Agent_Connector',
 	);
 
 	/**
-	 * Version du schéma (tables, capacités, crons) : déclenche la mise à niveau.
+	 * Version du schéma (tables, crons) : déclenche la mise à niveau.
 	 */
-	const SCHEMA_VERSION = '0.3.0';
+	const SCHEMA_VERSION = '1.0.0';
 	const SCHEMA_OPTION  = 'upsidly_agent_schema';
 	const PURGE_HOOK     = 'upsidly_agent_daily_purge';
+
+	/**
+	 * Options et tâches des versions 0.x (interface dans WordPress), retirées à la mise à niveau.
+	 */
+	const LEGACY_OPTIONS = array( 'upsidly_agent_key', 'upsidly_agent_site_description', 'upsidly_agent_brand_voice', 'upsidly_agent_connection', 'upsidly_agent_agent_enabled' );
 
 	/**
 	 * Renvoie l'instance unique.
@@ -90,12 +89,6 @@ final class Upsidly_Agent_Plugin {
 		self::load();
 
 		add_action( 'init', array( $this, 'load_textdomain' ) );
-
-		Upsidly_Agent_Settings::init();
-		Upsidly_Agent_Rest::init();
-		Upsidly_Agent_Heartbeat::init();
-		Upsidly_Agent_Admin::init();
-		Upsidly_Agent_Agent_Rest::init();
 		Upsidly_Agent_Connector::init();
 
 		add_action( 'admin_init', array( __CLASS__, 'maybe_upgrade' ) );
@@ -139,7 +132,7 @@ final class Upsidly_Agent_Plugin {
 	}
 
 	/**
-	 * Activation : table du journal, options, cron, redirection vers Réglages.
+	 * Activation : tables, cron, invitation à relier le site.
 	 *
 	 * @param bool $network_wide Activation réseau (multisite).
 	 */
@@ -149,27 +142,13 @@ final class Upsidly_Agent_Plugin {
 		if ( is_multisite() && $network_wide ) {
 			foreach ( get_sites( array( 'fields' => 'ids' ) ) as $blog_id ) {
 				switch_to_blog( $blog_id );
-				self::activate_site();
+				self::upgrade_site();
 				restore_current_blog();
 			}
 			return;
 		}
 
-		self::activate_site();
-	}
-
-	/**
-	 * Activation pour le site courant.
-	 */
-	private static function activate_site() {
-		Upsidly_Agent_Log::create_table();
-		Upsidly_Agent_Settings::add_options();
-		Upsidly_Agent_Heartbeat::schedule();
 		self::upgrade_site();
-
-		if ( '' === Upsidly_Agent_Settings::get_key() ) {
-			set_transient( 'upsidly_agent_activation_redirect', 1, 60 );
-		}
 	}
 
 	/**
@@ -182,17 +161,17 @@ final class Upsidly_Agent_Plugin {
 	}
 
 	/**
-	 * Tables de l'agent, capacité des administrateurs, cron de purge.
+	 * Tables (journal, actions et sauvegardes de l'agent), cron de purge, nettoyage des versions 0.x.
 	 */
 	private static function upgrade_site() {
 		Upsidly_Agent_Log::create_table();
 		Upsidly_Agent_Agent_Store::create_tables();
-		Upsidly_Agent_Settings::add_options();
 
-		$role = get_role( 'administrator' );
-		if ( $role && ! $role->has_cap( Upsidly_Agent_Agent_Rest::CAPABILITY ) ) {
-			$role->add_cap( Upsidly_Agent_Agent_Rest::CAPABILITY );
+		foreach ( self::LEGACY_OPTIONS as $option ) {
+			delete_option( $option );
 		}
+		delete_transient( 'upsidly_agent_status' );
+		wp_clear_scheduled_hook( 'upsidly_agent_daily_connect' );
 
 		if ( ! wp_next_scheduled( self::PURGE_HOOK ) ) {
 			wp_schedule_event( time() + 2 * HOUR_IN_SECONDS, 'daily', self::PURGE_HOOK );
@@ -202,36 +181,19 @@ final class Upsidly_Agent_Plugin {
 	}
 
 	/**
-	 * Désactivation : déconnexion (sans bloquer), déprogrammation du cron. Les données sont conservées.
+	 * Désactivation : déprogrammation du cron. La liaison et les sauvegardes sont conservées.
 	 *
 	 * @param bool $network_wide Désactivation réseau (multisite).
 	 */
 	public static function deactivate( $network_wide = false ) {
-		self::load();
-
 		if ( is_multisite() && $network_wide ) {
 			foreach ( get_sites( array( 'fields' => 'ids' ) ) as $blog_id ) {
 				switch_to_blog( $blog_id );
-				self::deactivate_site();
+				wp_clear_scheduled_hook( self::PURGE_HOOK );
 				restore_current_blog();
 			}
 			return;
 		}
-
-		self::deactivate_site();
-	}
-
-	/**
-	 * Désactivation pour le site courant.
-	 */
-	private static function deactivate_site() {
-		Upsidly_Agent_Heartbeat::unschedule();
 		wp_clear_scheduled_hook( self::PURGE_HOOK );
-
-		if ( '' !== Upsidly_Agent_Settings::get_key() ) {
-			// Erreurs ignorées : la désactivation ne doit jamais être bloquée.
-			( new Upsidly_Agent_Client() )->disconnect( null, 5 );
-		}
-		delete_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT );
 	}
 }

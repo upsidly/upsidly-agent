@@ -23,8 +23,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 	public function set_up() {
 		parent::set_up();
 		Upsidly_Agent_Agent_Store::create_tables();
-		update_option( 'upsidly_agent_key', 'upa_' . str_repeat( 'f', 40 ) );
-		set_transient( 'upsidly_agent_status', array( 'agent' => array( 'level' => 'full' ) ), 300 );
+		Upsidly_Agent_Tool_Registry::set_level( 'full' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		add_filter(
 			'upsidly_agent_health_check',
@@ -52,6 +51,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 			}
 		}
 		rmdir( $this->dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions
+		Upsidly_Agent_Tool_Registry::set_level( null );
 		parent::tear_down();
 	}
 
@@ -74,7 +74,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 				'status'      => 'pending',
 			)
 		);
-		$result = Upsidly_Agent_Agent_Loop::decide( $action_id, 'approve' );
+		$result = Upsidly_Agent_Actions::decide( $action_id, 'approve' );
 		$this->assertIsArray( $result, is_wp_error( $result ) ? $result->get_error_message() : '' );
 		return Upsidly_Agent_Agent_Store::get_action( $action_id );
 	}
@@ -83,7 +83,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 	 * Niveau write : outils sensibles refusés.
 	 */
 	public function test_requires_full_level() {
-		set_transient( 'upsidly_agent_status', array( 'agent' => array( 'level' => 'write' ) ), 300 );
+		Upsidly_Agent_Tool_Registry::set_level( 'write' );
 		$this->assertFalse( Upsidly_Agent_Tool_Registry::allowed( 'dangerous' ) );
 		$this->assertTrue( Upsidly_Agent_Tool_Registry::allowed( 'write' ) );
 
@@ -98,7 +98,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 				'status'      => 'pending',
 			)
 		);
-		$this->assertWPError( Upsidly_Agent_Agent_Loop::decide( $action_id, 'approve' ) );
+		$this->assertWPError( Upsidly_Agent_Actions::decide( $action_id, 'approve' ) );
 	}
 
 	/**
@@ -118,7 +118,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 		clean_post_cache( $posts[0] );
 		$this->assertSame( 'Nouveau', get_post( $posts[0] )->post_title );
 
-		Upsidly_Agent_Agent_Loop::undo( $action['id'] );
+		Upsidly_Agent_Actions::undo( $action['id'] );
 		clean_post_cache( $posts[0] );
 		$this->assertSame( 'Ancien', get_post( $posts[0] )->post_title );
 
@@ -147,7 +147,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 		$this->assertSame( 'applied', $delete['status'] );
 		wp_cache_flush();
 		$this->assertSame( '', get_post_meta( $post, 'upsidly_test', true ) );
-		Upsidly_Agent_Agent_Loop::undo( $delete['id'] );
+		Upsidly_Agent_Actions::undo( $delete['id'] );
 		wp_cache_flush();
 		$this->assertSame( 'valeur', get_post_meta( $post, 'upsidly_test', true ) );
 
@@ -155,7 +155,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 		$this->assertSame( 'applied', $insert['status'] );
 		wp_cache_flush();
 		$this->assertSame( 'oui', get_post_meta( $post, 'upsidly_insert', true ) );
-		Upsidly_Agent_Agent_Loop::undo( $insert['id'] );
+		Upsidly_Agent_Actions::undo( $insert['id'] );
 		wp_cache_flush();
 		$this->assertSame( '', get_post_meta( $post, 'upsidly_insert', true ) );
 	}
@@ -205,7 +205,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 		$this->assertSame( 'applied', $action['status'], (string) $action['result']['content'] );
 		$this->assertFileDoesNotExist( $this->dir . '/vieux.css' );
 
-		Upsidly_Agent_Agent_Loop::undo( $action['id'] );
+		Upsidly_Agent_Actions::undo( $action['id'] );
 		$this->assertFileExists( $this->dir . '/vieux.css' );
 		$this->assertSame( 'body{}', file_get_contents( $this->dir . '/vieux.css' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 
@@ -231,7 +231,7 @@ class Test_Upsidly_Agent_Agent_Dangerous extends WP_UnitTestCase {
 		$this->assertSame( 'applied', $action['status'], (string) $action['result']['content'] );
 		$this->assertFileDoesNotExist( WP_PLUGIN_DIR . '/hello.php' );
 
-		Upsidly_Agent_Agent_Loop::undo( $action['id'] );
+		Upsidly_Agent_Actions::undo( $action['id'] );
 		$this->assertFileExists( WP_PLUGIN_DIR . '/hello.php' );
 		$this->assertSame( $original, file_get_contents( WP_PLUGIN_DIR . '/hello.php' ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions
 

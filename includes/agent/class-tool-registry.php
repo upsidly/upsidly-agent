@@ -77,7 +77,7 @@ class Upsidly_Agent_Tool_Registry {
 	}
 
 	/**
-	 * Écritures autorisées pour ce site ? (niveau d'agent du site côté proxy : write ou full).
+	 * Écritures autorisées pour ce site ? (niveau d'agent fixé par Upsidly : write ou full).
 	 *
 	 * @return bool
 	 */
@@ -105,7 +105,7 @@ class Upsidly_Agent_Tool_Registry {
 	}
 
 	/**
-	 * Niveau d'agent du site (statut du proxy, en cache).
+	 * Niveau d'agent du site, fixé par Upsidly à chaque demande signée.
 	 *
 	 * @return string
 	 */
@@ -113,8 +113,8 @@ class Upsidly_Agent_Tool_Registry {
 		if ( null !== self::$level ) {
 			return self::$level;
 		}
-		$status = Upsidly_Agent_Rest::status();
-		return is_array( $status ) ? (string) ( $status['agent']['level'] ?? 'off' ) : 'off';
+		// Sans niveau transmis par Upsidly (demande signée), rien n'est permis au-delà de la lecture.
+		return 'off';
 	}
 
 	/**
