@@ -173,7 +173,7 @@ class Test_Upsidly_Agent_Drafts extends WP_UnitTestCase {
 
 		$data = $response->get_data();
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertFalse( term_exists( 'Menuiserie', 'category' ) );
+		$this->assertEmpty( term_exists( 'Menuiserie', 'category' ) );
 		$this->assertStringContainsString( 'Catégorie suggérée : Menuiserie', $data['result']['notes'] );
 		$this->assertStringContainsString( 'Catégorie suggérée : Menuiserie', get_post_meta( $data['post_id'], '_upsidly_agent_notes', true ) );
 	}
@@ -277,7 +277,8 @@ class Test_Upsidly_Agent_Drafts extends WP_UnitTestCase {
 		// Différences.
 		$diff = $this->rest( 'GET', '/diff/' . $draft->ID );
 		$this->assertSame( 200, $diff->get_status() );
-		$this->assertStringContainsString( 'Nouveau texte.', $diff->get_data()['html'] );
+		$this->assertStringContainsString( '<ins>Nouveau</ins>', $diff->get_data()['html'] );
+		$this->assertStringContainsString( '<del>Ancien</del>', $diff->get_data()['html'] );
 
 		// Application.
 		$apply = $this->rest( 'POST', '/apply/' . $draft->ID );
