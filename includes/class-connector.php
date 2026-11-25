@@ -49,7 +49,7 @@ class Upsidly_Agent_Connector {
 	private static $error = null;
 
 	/**
-	 * Branche les hooks. Appelé au chargement du plugin, avant la détermination de l'utilisateur courant.
+	 * Branche les hooks. Appelé au chargement du plugin ; la vérification de signature attend plugins_loaded.
 	 */
 	public static function init() {
 		add_action( 'admin_post_upsidly_agent_link', array( __CLASS__, 'start_link' ) );
@@ -57,7 +57,9 @@ class Upsidly_Agent_Connector {
 		add_action( 'admin_post_upsidly_agent_unlink', array( __CLASS__, 'unlink' ) );
 
 		if ( self::is_connector_request() ) {
-			self::verify_request();
+			// Après le chargement des extensions : wp_salt(), get_userdata() (pluggable.php) sont alors définies,
+			// et l'utilisateur courant n'est pas encore déterminé.
+			add_action( 'plugins_loaded', array( __CLASS__, 'verify_request' ), 0 );
 			add_filter( 'determine_current_user', array( __CLASS__, 'signed_user' ), 100 );
 			add_action( 'wp_ajax_' . self::AJAX_ACTION, array( __CLASS__, 'handle' ) );
 			add_action( 'wp_ajax_nopriv_' . self::AJAX_ACTION, array( __CLASS__, 'handle' ) );
@@ -262,7 +264,7 @@ class Upsidly_Agent_Connector {
 	/**
 	 * Vérifie la signature et prépare l'utilisateur d'exécution.
 	 */
-	private static function verify_request() {
+	public static function verify_request() {
 		$link = self::get();
 		if ( null === $link ) {
 			self::$error = array( 'not_linked', 'Ce site n\'est pas relié à Upsidly.', 409 );

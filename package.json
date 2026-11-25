@@ -1,6 +1,6 @@
 {
 	"name": "upsidly-agent",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"private": true,
 	"description": "Assistant IA dans l'administration WordPress (interface React).",
 	"license": "GPL-2.0-or-later",
