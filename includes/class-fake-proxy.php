@@ -90,7 +90,45 @@ class Upsidly_Agent_Fake_Proxy {
 			. "<!-- wp:paragraph -->\n<p>Contenu factice généré en mode développement.</p>\n<!-- /wp:paragraph -->\n\n"
 			. "<!-- wp:list -->\n<ul class=\"wp-block-list\"><!-- wp:list-item -->\n<li>Premier point</li>\n<!-- /wp:list-item -->\n\n<!-- wp:list-item -->\n<li>Second point</li>\n<!-- /wp:list-item --></ul>\n<!-- /wp:list -->";
 
-		$result = 'creer-page' === $skill
+		if ( 'rediger-contenu' === $skill ) {
+			$is_product = 'product' === ( $inputs['type_contenu'] ?? '' );
+			$result     = array(
+				'titre'            => 'Contenu factice',
+				'slug'             => 'contenu-factice',
+				'meta_description' => str_repeat( 'Description factice du contenu. ', 5 ),
+				'extrait'          => 'Extrait factice.',
+				'contenu'          => $content,
+				'termes'           => array(),
+				'champs'           => array(),
+				'notes'            => 'Réponse factice : rien à vérifier.',
+			);
+			if ( $is_product ) {
+				$result['produit'] = array(
+					'type_produit' => 'variable',
+					'attributs'    => array(
+						array(
+							'nom'             => 'Taille',
+							'valeurs'         => array( 'S', 'M' ),
+							'pour_variations' => true,
+						),
+					),
+					'variations'   => array(
+						array(
+							'attributs' => array( 'Taille' => 'S' ),
+							'prix'      => '20',
+						),
+						array(
+							'attributs' => array( 'Taille' => 'M' ),
+							'prix'      => '22',
+						),
+					),
+				);
+			}
+		} else {
+			$result = null;
+		}
+
+		$result = null !== $result ? $result : ( 'creer-page' === $skill
 			? array(
 				'titre'              => 'Page factice',
 				'meta_description'   => str_repeat( 'Description factice de la page. ', 5 ),
@@ -107,7 +145,7 @@ class Upsidly_Agent_Fake_Proxy {
 				'categorie'        => 'Conseils',
 				'etiquettes'       => array( 'factice', 'test', 'upsidly' ),
 				'notes'            => 'Réponse factice : rien à vérifier.',
-			);
+			) );
 
 		return array(
 			'status' => 200,
@@ -133,6 +171,35 @@ class Upsidly_Agent_Fake_Proxy {
 	 */
 	private static function skills() {
 		return array(
+			array(
+				'id'          => 'rediger-contenu',
+				'label'       => 'Rédiger un contenu',
+				'description' => 'Rédige un article, un produit ou tout autre type de contenu du site.',
+				'inputs'      => array(
+					'type_contenu' => array(
+						'type'     => 'string',
+						'required' => true,
+						'max'      => 100,
+					),
+					'demande'      => array(
+						'type'     => 'string',
+						'required' => true,
+						'max'      => 6000,
+					),
+					'mot_cle'      => array(
+						'type'     => 'string',
+						'required' => false,
+						'max'      => 120,
+					),
+					'longueur'     => array(
+						'type'     => 'int',
+						'required' => false,
+						'min'      => 100,
+						'max'      => 3000,
+						'default'  => 800,
+					),
+				),
+			),
 			array(
 				'id'          => 'creer-page',
 				'label'       => 'Créer ou modifier une page',

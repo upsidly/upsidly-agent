@@ -23,6 +23,14 @@ require_once "{$_tests_dir}/includes/functions.php";
 tests_add_filter(
 	'muplugins_loaded',
 	static function () {
+		// Extensions tierces installées par la CI (WooCommerce, ACF) pour les tests de « Rédiger un contenu ».
+		if ( getenv( 'UPSIDLY_TEST_PLUGINS' ) ) {
+			foreach ( array( 'woocommerce/woocommerce.php', 'advanced-custom-fields/acf.php' ) as $plugin ) {
+				if ( file_exists( WP_CONTENT_DIR . '/plugins/' . $plugin ) ) {
+					require WP_CONTENT_DIR . '/plugins/' . $plugin;
+				}
+			}
+		}
 		require dirname( __DIR__ ) . '/upsidly-agent.php';
 	}
 );
@@ -30,6 +38,11 @@ tests_add_filter(
 require "{$_tests_dir}/includes/bootstrap.php";
 
 require __DIR__ . '/class-fake-client.php';
+
+if ( class_exists( 'WC_Install' ) ) {
+	WC_Install::install();
+	$GLOBALS['wp_roles'] = new WP_Roles(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+}
 
 // Table du journal (créée normalement à l'activation).
 Upsidly_Agent_Log::create_table();

@@ -32,6 +32,8 @@ final class Upsidly_Agent_Plugin {
 		'class-sanitizer.php'                     => 'Upsidly_Agent_Sanitizer',
 		'class-seo.php'                           => 'Upsidly_Agent_Seo',
 		'class-log.php'                           => 'Upsidly_Agent_Log',
+		'class-content-types.php'                 => 'Upsidly_Agent_Content_Types',
+		'class-products.php'                      => 'Upsidly_Agent_Products',
 		'class-drafts.php'                        => 'Upsidly_Agent_Drafts',
 		'class-rest.php'                          => 'Upsidly_Agent_Rest',
 		'class-heartbeat.php'                     => 'Upsidly_Agent_Heartbeat',

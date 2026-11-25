@@ -80,6 +80,15 @@ class Upsidly_Agent_Rest {
 						'type'    => 'integer',
 						'default' => 0,
 					),
+					'status'  => array(
+						'type'    => 'string',
+						'default' => 'draft',
+						'enum'    => array( 'draft', 'pending', 'publish' ),
+					),
+					'terms'   => array(
+						'type'    => 'object',
+						'default' => array(),
+					),
 				),
 			)
 		);
@@ -210,6 +219,10 @@ class Upsidly_Agent_Rest {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public static function run( $request ) {
+		if ( 'rediger-contenu' === (string) $request->get_param( 'skill' ) ) {
+			return self::run_content( $request );
+		}
+
 		$skill   = (string) $request->get_param( 'skill' );
 		$inputs  = $request->get_param( 'inputs' );
 		$inputs  = is_array( $inputs ) ? $inputs : array();
@@ -322,6 +335,163 @@ class Upsidly_Agent_Rest {
 					'contenu_html'       => do_blocks( $cleaned['content'] ),
 				),
 				'source_page_id' => $source ? $source->ID : null,
+				'credits'        => $credits,
+			)
+		);
+	}
+
+	/**
+	 * POST /run pour « rediger-contenu » : type de contenu, taxonomies, champs personnalisés, produit.
+	 *
+	 * @param WP_REST_Request $request Requête.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	private static function run_content( $request ) {
+		$inputs    = $request->get_param( 'inputs' );
+		$inputs    = is_array( $inputs ) ? $inputs : array();
+		$post_type = sanitize_key( (string) ( $inputs['type_contenu'] ?? '' ) );
+		$object    = get_post_type_object( $post_type );
+
+		if ( ! $object || ! Upsidly_Agent_Content_Types::is_allowed_type( $post_type ) ) {
+			return new WP_Error( 'upsidly_agent_type', __( 'Choisissez un type de contenu que vous pouvez créer.', 'upsidly-agent' ), array( 'status' => 403 ) );
+		}
+
+		// Statut : publication directe seulement si l'utilisateur peut publier ce type.
+		$status = (string) $request->get_param( 'status' );
+		if ( 'publish' === $status && ! current_user_can( $object->cap->publish_posts ) ) {
+			return new WP_Error( 'upsidly_agent_publish', __( 'Vous n\'avez pas le droit de publier ce type de contenu : enregistrez-le en brouillon ou en attente de relecture.', 'upsidly-agent' ), array( 'status' => 403 ) );
+		}
+
+		// Termes choisis par l'utilisateur : taxonomies du type, droit d'assigner, termes existants.
+		$imposed    = array();
+		$taxonomies = array();
+		foreach ( Upsidly_Agent_Content_Types::taxonomies_for( $post_type ) as $taxonomy ) {
+			$taxonomies[ $taxonomy['slug'] ] = $taxonomy;
+		}
+		foreach ( (array) $request->get_param( 'terms' ) as $slug => $ids ) {
+			$slug = sanitize_key( (string) $slug );
+			if ( ! isset( $taxonomies[ $slug ] ) || ! $taxonomies[ $slug ]['canAssign'] ) {
+				continue;
+			}
+			foreach ( (array) $ids as $id ) {
+				$term = get_term( (int) $id, $slug );
+				if ( $term && ! is_wp_error( $term ) ) {
+					$imposed[ $slug ][] = (int) $term->term_id;
+				}
+			}
+		}
+
+		// Entrées complétées côté serveur.
+		unset( $inputs['taxonomies'], $inputs['champs'], $inputs['attributs_existants'] );
+		$inputs['type_contenu'] = $post_type;
+		$inputs['type_libelle'] = $object->labels->singular_name;
+		$inputs['taxonomies']   = Upsidly_Agent_Content_Types::taxonomies_prompt( $post_type, $imposed );
+		$inputs['champs']       = Upsidly_Agent_Content_Types::fields_prompt( $post_type );
+		if ( 'product' === $post_type ) {
+			$inputs['attributs_existants'] = Upsidly_Agent_Content_Types::attributes_prompt();
+		}
+		foreach ( array( 'taxonomies', 'champs', 'attributs_existants' ) as $key ) {
+			if ( isset( $inputs[ $key ] ) && '' === $inputs[ $key ] ) {
+				unset( $inputs[ $key ] );
+			}
+		}
+
+		$response = self::client()->run( 'rediger-contenu', $inputs, self::context() );
+
+		if ( is_wp_error( $response ) ) {
+			Upsidly_Agent_Log::add(
+				array(
+					'action'  => 'run',
+					'skill'   => 'rediger-contenu',
+					'status'  => 'error',
+					'credits' => 0,
+					'error'   => $response->get_error_code() . ' : ' . $response->get_error_message(),
+				)
+			);
+			if ( in_array( $response->get_error_code(), array( 'uap_quota_exceeded', 'uap_incomplete' ), true ) ) {
+				delete_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT );
+			}
+			return new WP_Error( $response->get_error_code(), $response->get_error_message(), (array) $response->get_error_data() );
+		}
+
+		$credits = isset( $response['credits'] ) && is_array( $response['credits'] ) ? $response['credits'] : array();
+		$charged = isset( $credits['charged'] ) ? (int) $credits['charged'] : 0;
+		$raw     = isset( $response['result'] ) && is_array( $response['result'] ) ? $response['result'] : array();
+
+		$fields  = Upsidly_Agent_Sanitizer::fields( $raw );
+		$cleaned = Upsidly_Agent_Sanitizer::content( $raw['contenu'] ?? '' );
+		$notes   = '' !== $fields['notes'] ? array( $fields['notes'] ) : array();
+		if ( $cleaned['removed'] > 0 ) {
+			$notes[] = sprintf(
+				/* translators: %d: nombre de blocs. */
+				_n( '%d bloc non pris en charge a été retiré.', '%d blocs non pris en charge ont été retirés.', $cleaned['removed'], 'upsidly-agent' ),
+				$cleaned['removed']
+			);
+		}
+
+		$created = Upsidly_Agent_Drafts::create_content(
+			$post_type,
+			$fields,
+			$cleaned['content'],
+			$status,
+			$imposed,
+			Upsidly_Agent_Sanitizer::terms( $raw['termes'] ?? array() ),
+			Upsidly_Agent_Sanitizer::custom_values( $raw['champs'] ?? array() ),
+			Upsidly_Agent_Sanitizer::product( $raw['produit'] ?? array() ),
+			$notes
+		);
+		delete_transient( Upsidly_Agent_Settings::STATUS_TRANSIENT );
+
+		if ( is_wp_error( $created ) ) {
+			Upsidly_Agent_Log::add(
+				array(
+					'action'  => 'run',
+					'skill'   => 'rediger-contenu',
+					'status'  => 'error',
+					'credits' => $charged,
+					'error'   => $created->get_error_message(),
+				)
+			);
+			return new WP_Error(
+				'upsidly_agent_draft_failed',
+				__( 'Le contenu a été généré mais n\'a pas pu être enregistré : ', 'upsidly-agent' ) . $created->get_error_message(),
+				array(
+					'status'  => 500,
+					'credits' => $credits,
+				)
+			);
+		}
+
+		$post_id = (int) $created['post_id'];
+		Upsidly_Agent_Log::add(
+			array(
+				'action'  => 'run',
+				'skill'   => 'rediger-contenu',
+				'post_id' => $post_id,
+				'status'  => 'ok',
+				'credits' => $charged,
+			)
+		);
+
+		$post_status = get_post_status( $post_id );
+		return rest_ensure_response(
+			array(
+				'post_id'        => $post_id,
+				'edit_url'       => (string) get_edit_post_link( $post_id, 'raw' ),
+				'preview_url'    => 'publish' === $post_status ? (string) get_permalink( $post_id ) : (string) get_preview_post_link( $post_id ),
+				'view_url'       => 'publish' === $post_status ? (string) get_permalink( $post_id ) : '',
+				'result'         => array(
+					'titre'            => get_the_title( $post_id ),
+					'type_contenu'     => $object->labels->singular_name,
+					'statut'           => $post_status,
+					'extrait'          => $fields['extrait'],
+					'meta_description' => $fields['meta_description'],
+					'termes'           => $created['terms'],
+					'produit'          => 'product' === $post_type ? Upsidly_Agent_Products::summary( $post_id ) : null,
+					'notes'            => implode( "\n", $created['notes'] ),
+					'contenu_html'     => do_blocks( $cleaned['content'] ),
+				),
+				'source_page_id' => null,
 				'credits'        => $credits,
 			)
 		);

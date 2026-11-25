@@ -19,6 +19,12 @@ import {
  * @param {number} props.draftId Brouillon de révision.
  * @return {Element} Élément.
  */
+const STATUS_LABELS = {
+	draft: __( 'Brouillon', 'upsidly-agent' ),
+	pending: __( 'En attente de relecture', 'upsidly-agent' ),
+	publish: __( 'Publié', 'upsidly-agent' ),
+};
+
 export function ApplyBlock( { draftId } ) {
 	const [ busy, setBusy ] = useState( false );
 	const [ applied, setApplied ] = useState( null );
@@ -151,6 +157,49 @@ export default function ResultCard( {
 				<Row label={ __( 'Méta-description', 'upsidly-agent' ) }>
 					{ data.meta_description }
 				</Row>
+				{ data.type_contenu && (
+					<Row label={ __( 'Type', 'upsidly-agent' ) }>
+						{ data.type_contenu }
+					</Row>
+				) }
+				{ data.statut && (
+					<Row label={ __( 'Statut', 'upsidly-agent' ) }>
+						{ STATUS_LABELS[ data.statut ] || data.statut }
+					</Row>
+				) }
+				{ data.termes &&
+					Object.entries( data.termes ).map( ( [ label, names ] ) => (
+						<Row key={ label } label={ label }>
+							{ names.join( ', ' ) }
+						</Row>
+					) ) }
+				{ data.produit && data.produit.type && (
+					<Row label={ __( 'Produit', 'upsidly-agent' ) }>
+						{ [
+							data.produit.type === 'variable'
+								? sprintf(
+										/* translators: %d: nombre de variations. */
+										__(
+											'Variable, %d variation(s)',
+											'upsidly-agent'
+										),
+										data.produit.variations
+									)
+								: __( 'Simple', 'upsidly-agent' ),
+							data.produit.prix,
+							data.produit.ugs &&
+								sprintf(
+									/* translators: %s: référence. */
+									__( 'Réf. %s', 'upsidly-agent' ),
+									data.produit.ugs
+								),
+							( data.produit.attributs || [] ).length > 0 &&
+								data.produit.attributs.join( ', ' ),
+						]
+							.filter( Boolean )
+							.join( ' · ' ) }
+					</Row>
+				) }
 				{ skillId === 'rediger-article' && (
 					<Row label={ __( 'Catégorie', 'upsidly-agent' ) }>
 						{ data.categorie }
@@ -176,15 +225,19 @@ export default function ResultCard( {
 
 				<div className="upsidly-agent-actions">
 					<Button variant="primary" href={ result.edit_url }>
-						{ __( 'Ouvrir le brouillon', 'upsidly-agent' ) }
+						{ data.statut === 'publish'
+							? __( 'Modifier', 'upsidly-agent' )
+							: __( 'Ouvrir le brouillon', 'upsidly-agent' ) }
 					</Button>
 					<Button
 						variant="secondary"
-						href={ result.preview_url }
+						href={ result.view_url || result.preview_url }
 						target="_blank"
 						rel="noreferrer"
 					>
-						{ __( 'Prévisualiser', 'upsidly-agent' ) }
+						{ result.view_url
+							? __( 'Voir en ligne', 'upsidly-agent' )
+							: __( 'Prévisualiser', 'upsidly-agent' ) }
 					</Button>
 					{ isRevision && (
 						<Button variant="secondary" onClick={ onShowDiff }>

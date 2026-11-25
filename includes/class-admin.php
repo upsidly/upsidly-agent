@@ -273,14 +273,15 @@ class Upsidly_Agent_Admin {
 		);
 
 		return array(
-			'restUrl'     => esc_url_raw( rest_url( Upsidly_Agent_Rest::NAMESPACE_V1 . '/' ) ),
-			'nonce'       => wp_create_nonce( 'wp_rest' ),
-			'settingsUrl' => current_user_can( 'manage_options' ) ? Upsidly_Agent_Settings::page_url() : '',
-			'caps'        => array(
+			'restUrl'      => esc_url_raw( rest_url( Upsidly_Agent_Rest::NAMESPACE_V1 . '/' ) ),
+			'nonce'        => wp_create_nonce( 'wp_rest' ),
+			'settingsUrl'  => current_user_can( 'manage_options' ) ? Upsidly_Agent_Settings::page_url() : '',
+			'caps'         => array(
 				'edit_pages'    => current_user_can( 'edit_pages' ),
 				'publish_pages' => current_user_can( 'publish_pages' ),
 			),
-			'categories'  => is_wp_error( $categories ) ? array() : array_map(
+			'contentTypes' => Upsidly_Agent_Content_Types::post_types(),
+			'categories'   => is_wp_error( $categories ) ? array() : array_map(
 				static function ( $term ) {
 					return array(
 						'id'   => (int) $term->term_id,
@@ -289,7 +290,7 @@ class Upsidly_Agent_Admin {
 				},
 				$categories
 			),
-			'pages'       => array_map(
+			'pages'        => array_map(
 				static function ( $page ) {
 					return array(
 						'id'           => (int) $page->ID,

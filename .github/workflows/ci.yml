@@ -48,6 +48,15 @@ jobs:
       - name: Installation de WordPress et de la suite de tests
         run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1:3306 ${{ matrix.wp }}
 
+      - name: Extensions de test (WooCommerce, ACF)
+        if: matrix.wp == 'latest'
+        run: |
+          for p in woocommerce advanced-custom-fields; do
+            curl -fsSL "https://downloads.wordpress.org/plugin/$p.latest-stable.zip" -o "/tmp/$p.zip"
+            unzip -q "/tmp/$p.zip" -d /tmp/wordpress/wp-content/plugins/
+          done
+          echo "UPSIDLY_TEST_PLUGINS=1" >> "$GITHUB_ENV"
+
       - name: PHPUnit
         run: |
           set +e

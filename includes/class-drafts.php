@@ -67,6 +67,151 @@ class Upsidly_Agent_Drafts {
 	}
 
 	/**
+	 * Crée un contenu de n'importe quel type (rediger-contenu) : article, produit WooCommerce ou type sur mesure.
+	 *
+	 * @param string $post_type Type de contenu (déjà autorisé pour l'utilisateur).
+	 * @param array  $fields    Champs nettoyés.
+	 * @param string $content   Contenu nettoyé.
+	 * @param string $status    draft | pending | publish (déjà validé).
+	 * @param array  $imposed   Taxonomie => identifiants de termes choisis par l'utilisateur (déjà validés).
+	 * @param array  $suggested Taxonomie => noms de termes proposés par l'IA.
+	 * @param array  $values    Champs personnalisés proposés par l'IA (nom => texte).
+	 * @param array  $product   Données produit nettoyées (si produit).
+	 * @param array  $notes     Notes de départ.
+	 * @return array{post_id: int, notes: string[], terms: array<string, string[]>}|WP_Error
+	 */
+	public static function create_content( $post_type, array $fields, $content, $status, array $imposed, array $suggested, array $values, array $product, array $notes = array() ) {
+		if ( 'product' === $post_type ) {
+			$post_id = Upsidly_Agent_Products::create( $fields, $content, $product, $status, $notes );
+		} else {
+			$post_id = wp_insert_post(
+				wp_slash(
+					array(
+						'post_type'    => $post_type,
+						'post_status'  => $status,
+						'post_author'  => get_current_user_id(),
+						'post_title'   => '' !== $fields['titre'] ? $fields['titre'] : __( 'Contenu sans titre', 'upsidly-agent' ),
+						'post_name'    => $fields['slug'],
+						'post_content' => $content,
+						'post_excerpt' => $fields['extrait'],
+					)
+				),
+				true
+			);
+		}
+		if ( is_wp_error( $post_id ) ) {
+			return $post_id;
+		}
+
+		$assigned = self::assign_terms( $post_id, $post_type, $imposed, $suggested, $notes );
+		self::write_custom_fields( $post_id, $post_type, $values, $notes );
+		self::finalize( $post_id, 'rediger-contenu', $fields, $notes );
+
+		return array(
+			'post_id' => (int) $post_id,
+			'notes'   => $notes,
+			'terms'   => $assigned,
+		);
+	}
+
+	/**
+	 * Termes : choisis par l'utilisateur + proposés par l'IA (existants, ou créés si l'utilisateur en a le droit).
+	 *
+	 * @param int    $post_id   Contenu.
+	 * @param string $post_type Type.
+	 * @param array  $imposed   Taxonomie => identifiants.
+	 * @param array  $suggested Taxonomie => noms.
+	 * @param array  $notes     Notes (par référence).
+	 * @return array<string, string[]> Libellé de taxonomie => noms des termes assignés.
+	 */
+	private static function assign_terms( $post_id, $post_type, array $imposed, array $suggested, array &$notes ) {
+		$assigned = array();
+
+		foreach ( Upsidly_Agent_Content_Types::taxonomies_for( $post_type ) as $taxonomy ) {
+			$slug = $taxonomy['slug'];
+			$ids  = array_map( 'intval', $imposed[ $slug ] ?? array() );
+
+			foreach ( $suggested[ $slug ] ?? array() as $name ) {
+				$term = get_term_by( 'name', $name, $slug );
+				if ( $term ) {
+					$ids[] = (int) $term->term_id;
+				} elseif ( $taxonomy['canAssign'] && $taxonomy['canCreate'] ) {
+					$created = wp_insert_term( $name, $slug );
+					if ( ! is_wp_error( $created ) ) {
+						$ids[] = (int) $created['term_id'];
+					}
+				} else {
+					$notes[] = sprintf(
+						/* translators: 1: taxonomie, 2: terme. */
+						__( '%1$s suggéré (non créé) : %2$s', 'upsidly-agent' ),
+						$taxonomy['label'],
+						$name
+					);
+				}
+			}
+
+			$ids = array_values( array_unique( array_filter( $ids ) ) );
+			if ( ! $ids || ! $taxonomy['canAssign'] ) {
+				continue;
+			}
+			wp_set_object_terms( $post_id, $ids, $slug, false );
+
+			$names = array();
+			foreach ( $ids as $id ) {
+				$term = get_term( $id, $slug );
+				if ( $term && ! is_wp_error( $term ) ) {
+					$names[] = $term->name;
+				}
+			}
+			$assigned[ $taxonomy['label'] ] = $names;
+		}
+
+		return $assigned;
+	}
+
+	/**
+	 * Champs personnalisés texte (ACF, JetEngine).
+	 *
+	 * @param int    $post_id   Contenu.
+	 * @param string $post_type Type.
+	 * @param array  $values    Nom => texte.
+	 * @param array  $notes     Notes (par référence).
+	 */
+	private static function write_custom_fields( $post_id, $post_type, array $values, array &$notes ) {
+		$missing = array();
+
+		foreach ( Upsidly_Agent_Content_Types::custom_fields( $post_type ) as $field ) {
+			$value = $values[ $field['name'] ] ?? '';
+			if ( '' === trim( $value ) ) {
+				$missing[] = $field['label'];
+				continue;
+			}
+
+			if ( 'wysiwyg' === $field['type'] ) {
+				$value = wp_kses_post( $value );
+			} elseif ( 'textarea' === $field['type'] ) {
+				$value = sanitize_textarea_field( $value );
+			} else {
+				$value = sanitize_text_field( $value );
+			}
+
+			if ( 'acf' === $field['source'] && function_exists( 'update_field' ) ) {
+				update_field( $field['key'], $value, $post_id );
+			} else {
+				update_post_meta( $post_id, $field['name'], wp_slash( $value ) );
+			}
+		}
+
+		if ( $missing ) {
+			$notes[] = sprintf(
+				/* translators: %s: liste de champs. */
+				__( 'Champs à compléter : %s', 'upsidly-agent' ),
+				implode( ', ', $missing )
+			);
+		}
+	}
+
+	/**
 	 * Crée une page en brouillon (creer-page). En mode modifier : nouvelle page « (révision IA) », l'original n'est pas touché.
 	 *
 	 * @param array        $fields  Champs nettoyés.

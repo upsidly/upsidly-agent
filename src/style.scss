@@ -144,3 +144,51 @@
 		width: 100%;
 	}
 }
+
+.upsidly-agent-taxonomies {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+
+	&__intro {
+		margin: 0;
+		color: #50575e;
+	}
+
+	&__group {
+		margin: 8px 0 0;
+	}
+
+	&__grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: 12px;
+	}
+}
+
+.upsidly-agent-taxonomy {
+	padding: 8px 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	background: #fff;
+
+	legend {
+		padding: 0 4px;
+		font-weight: 600;
+	}
+
+	&__count {
+		margin-left: 6px;
+		font-weight: 400;
+		color: #2271b1;
+	}
+
+	&__terms {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-height: 220px;
+		overflow-y: auto;
+		margin-top: 6px;
+	}
+}

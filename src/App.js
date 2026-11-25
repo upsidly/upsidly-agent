@@ -18,6 +18,7 @@ import { Button, Card, CardBody, Notice, Spinner } from '@wordpress/components';
 import CreditsGauge from './components/CreditsGauge';
 import SkillPicker from './components/SkillPicker';
 import SkillForm, { initialValues } from './components/SkillForm';
+import ContentForm, { contentInitialValues } from './components/ContentForm';
 import ResultCard from './components/ResultCard';
 import PageDiff from './components/PageDiff';
 
@@ -102,12 +103,29 @@ export default function App( { config } ) {
 		return () => clearInterval( timer );
 	}, [ submitting ] );
 
+	const contentTypes = config.contentTypes || [];
+
 	const skills = useMemo( () => {
 		const list = ( status && status.skills ) || [];
+		const hasContent = list.some(
+			( item ) => item.id === 'rediger-contenu'
+		);
 		return list.filter(
-			( skill ) => skill.id !== 'creer-page' || caps.edit_pages
+			( item ) =>
+				( item.id !== 'creer-page' || caps.edit_pages ) &&
+				// « Rédiger un contenu » remplace « Rédiger un article ».
+				( item.id !== 'rediger-article' || ! hasContent )
 		);
 	}, [ status, caps.edit_pages ] );
+
+	const startValues = ( item ) => {
+		if ( ! item ) {
+			return {};
+		}
+		return item.id === 'rediger-contenu'
+			? contentInitialValues( item, contentTypes )
+			: initialValues( item );
+	};
 
 	const skill = skills.find( ( item ) => item.id === skillId ) || null;
 	const exhausted = isExhausted( credits );
@@ -115,7 +133,7 @@ export default function App( { config } ) {
 	const chooseSkill = ( id ) => {
 		const chosen = skills.find( ( item ) => item.id === id );
 		setSkillId( id );
-		setValues( chosen ? initialValues( chosen ) : {} );
+		setValues( startValues( chosen ) );
 		setPageId( 0 );
 		setResult( null );
 		setRunError( null );
@@ -125,7 +143,7 @@ export default function App( { config } ) {
 		setResult( null );
 		setRunError( null );
 		setPageId( 0 );
-		setValues( skill ? initialValues( skill ) : {} );
+		setValues( startValues( skill ) );
 	};
 
 	const generate = () => {
@@ -138,6 +156,12 @@ export default function App( { config } ) {
 		setResult( null );
 
 		const data = { skill: skill.id, inputs: values };
+		if ( skill.id === 'rediger-contenu' ) {
+			const { __status: postStatus, __terms: terms, ...inputs } = values;
+			data.inputs = inputs;
+			data.status = postStatus || 'draft';
+			data.terms = terms || {};
+		}
 		if ( skill.id === 'creer-page' && values.mode === 'modifier' ) {
 			data.page_id = pageId;
 		}
@@ -215,15 +239,25 @@ export default function App( { config } ) {
 			{ skill && ! result && (
 				<Card className="upsidly-agent-form">
 					<CardBody>
-						<SkillForm
-							skill={ skill }
-							values={ values }
-							onChange={ setValues }
-							pages={ pages }
-							pageId={ pageId }
-							onPageChange={ setPageId }
-							disabled={ submitting }
-						/>
+						{ skill.id === 'rediger-contenu' ? (
+							<ContentForm
+								skill={ skill }
+								values={ values }
+								onChange={ setValues }
+								types={ contentTypes }
+								disabled={ submitting }
+							/>
+						) : (
+							<SkillForm
+								skill={ skill }
+								values={ values }
+								onChange={ setValues }
+								pages={ pages }
+								pageId={ pageId }
+								onPageChange={ setPageId }
+								disabled={ submitting }
+							/>
+						) }
 
 						{ runError && (
 							<Notice status="error" isDismissible={ false }>
@@ -241,7 +275,12 @@ export default function App( { config } ) {
 									exhausted ||
 									( skill.id === 'creer-page' &&
 										values.mode === 'modifier' &&
-										! pageId )
+										! pageId ) ||
+									( skill.id === 'rediger-contenu' &&
+										( ! values.type_contenu ||
+											! (
+												values.demande || ''
+											).trim() ) )
 								}
 							>
 								{ __( 'Générer', 'upsidly-agent' ) }
