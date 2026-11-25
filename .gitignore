@@ -1,0 +1,8 @@
+/node_modules/
+/build/
+/dist/
+/vendor/*
+!/vendor/plugin-update-checker/
+/.phpunit.result.cache
+/.phpunit.cache/
+/composer.lock

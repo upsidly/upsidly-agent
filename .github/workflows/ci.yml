@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  phpunit:
+    name: PHPUnit (PHP ${{ matrix.php }}, WordPress ${{ matrix.wp }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.0'
+            wp: '6.4'
+          - php: '8.3'
+            wp: latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, mbstring
+          ini-values: error_reporting=E_ALL, display_errors=On
+          tools: composer:v2
+          coverage: none
+
+      - name: Subversion (suite de tests WordPress)
+        run: sudo apt-get update -q && sudo apt-get install -y -q subversion
+
+      - name: Dépendances Composer
+        run: composer install --no-interaction --no-progress
+
+      - name: Installation de WordPress et de la suite de tests
+        run: bash bin/install-wp-tests.sh wordpress_test root root 127.0.0.1:3306 ${{ matrix.wp }}
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit
+
+  lint:
+    name: phpcs et lint JS
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Dépendances
+        run: composer install --no-interaction --no-progress && npm ci
+
+      - name: phpcs (WordPress Coding Standards)
+        run: vendor/bin/phpcs
+
+      - name: Lint JS
+        run: npm run lint:js
+
+      - name: Build
+        run: npm run build
+
+      - name: Syntaxe PHP 8.0
+        run: |
+          docker run --rm -v "$PWD":/app -w /app php:8.0-cli sh -c \
+            'find . -name "*.php" -not -path "./vendor/*" -not -path "./node_modules/*" -print0 | xargs -0 -n1 php -l > /dev/null'
