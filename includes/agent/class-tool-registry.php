@@ -37,6 +37,9 @@ class Upsidly_Agent_Tool_Registry {
 		foreach ( array( 'edit_file', 'create_file', 'plugin_activate', 'plugin_deactivate', 'theme_activate', 'plugin_update', 'theme_update', 'plugin_install', 'update_option', 'save_content', 'save_term' ) as $write ) {
 			$tools[ $write ] = array( 'Upsidly_Agent_Tools_Write', $write, self::RISK_WRITE );
 		}
+		foreach ( array( 'db_query_write', 'run_php', 'delete_file', 'plugin_delete', 'theme_delete' ) as $dangerous ) {
+			$tools[ $dangerous ] = array( 'Upsidly_Agent_Tools_Dangerous', $dangerous, self::RISK_DANGEROUS );
+		}
 
 		/**
 		 * Filtre le registre des outils (tests, lots suivants).
@@ -63,9 +66,36 @@ class Upsidly_Agent_Tool_Registry {
 	 * @return bool
 	 */
 	public static function writes_allowed() {
+		return in_array( self::site_level(), array( 'write', 'full' ), true );
+	}
+
+	/**
+	 * Outils sensibles autorisés pour ce site ? (niveau full).
+	 *
+	 * @return bool
+	 */
+	public static function dangerous_allowed() {
+		return 'full' === self::site_level();
+	}
+
+	/**
+	 * Une action de ce niveau de risque est-elle autorisée ?
+	 *
+	 * @param string $risk Niveau de risque.
+	 * @return bool
+	 */
+	public static function allowed( $risk ) {
+		return self::RISK_DANGEROUS === $risk ? self::dangerous_allowed() : ( self::RISK_WRITE === $risk ? self::writes_allowed() : true );
+	}
+
+	/**
+	 * Niveau d'agent du site (statut du proxy, en cache).
+	 *
+	 * @return string
+	 */
+	private static function site_level() {
 		$status = Upsidly_Agent_Rest::status();
-		$level  = is_array( $status ) ? (string) ( $status['agent']['level'] ?? 'off' ) : 'off';
-		return in_array( $level, array( 'write', 'full' ), true );
+		return is_array( $status ) ? (string) ( $status['agent']['level'] ?? 'off' ) : 'off';
 	}
 
 	/**

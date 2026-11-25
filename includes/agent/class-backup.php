@@ -121,6 +121,17 @@ class Upsidly_Agent_Backup {
 				$result = self::restore_post( (int) $backup['target'], $payload );
 				break;
 
+			case 'rows':
+				$result = self::restore_rows( $backup['target'], $payload );
+				break;
+
+			case 'file_copy':
+				wp_mkdir_p( dirname( $backup['target'] ) );
+				$result = is_file( (string) $payload['copy'] ) && copy( (string) $payload['copy'], $backup['target'] ) // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_copy -- restauration d'une copie locale.
+					? true
+					: new WP_Error( 'upsidly_agent_backup', __( 'Copie de sauvegarde introuvable.', 'upsidly-agent' ) );
+				break;
+
 			case 'term':
 				$result = self::restore_term( (int) $backup['target'], $payload );
 				break;
@@ -281,6 +292,33 @@ class Upsidly_Agent_Backup {
 				update_post_meta( $post_id, $key, wp_slash( maybe_unserialize( (string) $value ) ) );
 			}
 		}
+		return true;
+	}
+
+	/**
+	 * Restaure des lignes de table (requête SQL d'écriture).
+	 *
+	 * @param string $table   Table.
+	 * @param array  $payload pk, type, rows, inserted.
+	 * @return true|WP_Error
+	 */
+	private static function restore_rows( $table, array $payload ) {
+		global $wpdb;
+		$pk = (string) ( $payload['pk'] ?? '' );
+		if ( '' === $pk || 0 !== strpos( $table, $wpdb->prefix ) ) {
+			return new WP_Error( 'upsidly_agent_backup', __( 'Sauvegarde de lignes invalide.', 'upsidly-agent' ) );
+		}
+		foreach ( (array) ( $payload['inserted'] ?? array() ) as $id ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- annulation d'une insertion validée.
+			$wpdb->delete( $table, array( $pk => $id ) );
+		}
+		foreach ( (array) ( $payload['rows'] ?? array() ) as $row ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- restauration de lignes sauvegardées.
+			if ( false === $wpdb->replace( $table, (array) $row ) ) {
+				return new WP_Error( 'upsidly_agent_backup', 'Restauration incomplète : ' . $wpdb->last_error );
+			}
+		}
+		wp_cache_flush();
 		return true;
 	}
 

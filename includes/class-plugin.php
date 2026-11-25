@@ -44,6 +44,7 @@ final class Upsidly_Agent_Plugin {
 		'agent/class-backup.php'                  => 'Upsidly_Agent_Backup',
 		'agent/class-health-check.php'            => 'Upsidly_Agent_Health_Check',
 		'agent/tools/class-tools-write.php'       => 'Upsidly_Agent_Tools_Write',
+		'agent/tools/class-tools-dangerous.php'   => 'Upsidly_Agent_Tools_Dangerous',
 		'agent/tools/class-tools-files.php'       => 'Upsidly_Agent_Tools_Files',
 		'agent/tools/class-tools-diagnostics.php' => 'Upsidly_Agent_Tools_Diagnostics',
 		'agent/tools/class-tools-settings.php'    => 'Upsidly_Agent_Tools_Settings',

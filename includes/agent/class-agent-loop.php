@@ -323,10 +323,12 @@ class Upsidly_Agent_Agent_Loop {
 				'risk'        => $risk,
 				'input'       => $input,
 			);
-			if ( ! Upsidly_Agent_Tool_Registry::writes_allowed() ) {
+			if ( ! Upsidly_Agent_Tool_Registry::allowed( $risk ) ) {
 				$fields['status'] = 'failed';
 				$fields['result'] = array(
-					'content'  => 'Les modifications ne sont pas autorisées pour ce site (niveau d\'agent en lecture seule). Explique à la personne la modification à faire.',
+					'content'  => Upsidly_Agent_Tool_Registry::RISK_DANGEROUS === $risk
+						? 'Les actions sensibles ne sont pas autorisées pour ce site. Utilise un outil d\'écriture standard ou explique à la personne la modification à faire.'
+						: 'Les modifications ne sont pas autorisées pour ce site (niveau d\'agent en lecture seule). Explique à la personne la modification à faire.',
 					'is_error' => true,
 				);
 			} else {
@@ -435,8 +437,8 @@ class Upsidly_Agent_Agent_Loop {
 		$id = (string) $action['conversation_id'];
 
 		if ( 'approve' === $decision ) {
-			if ( ! Upsidly_Agent_Tool_Registry::writes_allowed() ) {
-				return new WP_Error( 'upsidly_agent_write', __( 'Les modifications ne sont pas autorisées pour ce site.', 'upsidly-agent' ), array( 'status' => 403 ) );
+			if ( ! Upsidly_Agent_Tool_Registry::allowed( $action['risk'] ) ) {
+				return new WP_Error( 'upsidly_agent_write', __( 'Cette modification n\'est pas autorisée pour ce site.', 'upsidly-agent' ), array( 'status' => 403 ) );
 			}
 			// Marquée tout de suite pour éviter une double application.
 			Upsidly_Agent_Agent_Store::update_action( $action['id'], array( 'status' => 'applying' ) );

@@ -425,3 +425,34 @@
 		border-radius: 6px;
 	}
 }
+
+.upsidly-chat-action.is-dangerous.is-pending {
+	border-left-color: #d63638;
+	background: #fff8f8;
+}
+
+.upsidly-chat-action__danger {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	border-radius: 6px;
+	background: #fbe0e0;
+	color: #8a1f1f;
+}
+
+.upsidly-chat-action__confirm {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.upsidly-agent-code {
+	max-height: 320px;
+	overflow: auto;
+	padding: 10px;
+	border-radius: 6px;
+	background: #1e1e2e;
+	color: #e6e6f0;
+	white-space: pre-wrap;
+	font-size: 12px;
+}

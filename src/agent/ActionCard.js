@@ -3,7 +3,7 @@
  */
 import { createElement, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { Button } from '@wordpress/components';
+import { Button, CheckboxControl } from '@wordpress/components';
 
 const STATUS = {
 	pending: __( 'En attente de votre validation', 'upsidly-agent' ),
@@ -26,6 +26,8 @@ export default function ActionCard( {
 	busy,
 } ) {
 	const [ rejecting, setRejecting ] = useState( false );
+	const [ confirmed, setConfirmed ] = useState( false );
+	const dangerous = action.risk === 'dangerous';
 	const [ comment, setComment ] = useState( '' );
 	const [ showPreview, setShowPreview ] = useState(
 		action.status === 'pending'
@@ -33,13 +35,26 @@ export default function ActionCard( {
 	const pending = action.status === 'pending';
 
 	return (
-		<div className={ `upsidly-chat-action is-${ action.status }` }>
+		<div
+			className={ `upsidly-chat-action is-${ action.status }${
+				dangerous ? ' is-dangerous' : ''
+			}` }
+		>
 			<div className="upsidly-chat-action__head">
 				<strong>{ action.title || fallbackTitle }</strong>
 				<span className="upsidly-chat-action__status">
 					{ STATUS[ action.status ] || action.status }
 				</span>
 			</div>
+
+			{ dangerous && pending && (
+				<p className="upsidly-chat-action__danger">
+					{ __(
+						'Action sensible : elle agit directement sur la base de données, le code ou les fichiers du site. Lisez le détail avant de l’appliquer.',
+						'upsidly-agent'
+					) }
+				</p>
+			) }
 
 			{ action.reason && (
 				<p className="upsidly-chat-action__reason">{ action.reason }</p>
@@ -76,13 +91,28 @@ export default function ActionCard( {
 				<p className="upsidly-chat-action__result">{ action.result }</p>
 			) }
 
+			{ pending && ! rejecting && dangerous && (
+				<div className="upsidly-chat-action__confirm">
+					<CheckboxControl
+						label={ __(
+							'J’ai lu le détail et je comprends les conséquences.',
+							'upsidly-agent'
+						) }
+						checked={ confirmed }
+						onChange={ setConfirmed }
+						__nextHasNoMarginBottom
+					/>
+				</div>
+			) }
+
 			{ pending && ! rejecting && (
 				<div className="upsidly-chat-action__buttons">
 					<Button
 						variant="primary"
+						isDestructive={ dangerous }
 						onClick={ () => onDecide( action, 'approve' ) }
 						isBusy={ busy }
-						disabled={ busy }
+						disabled={ busy || ( dangerous && ! confirmed ) }
 					>
 						{ __( 'Appliquer', 'upsidly-agent' ) }
 					</Button>

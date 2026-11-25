@@ -69,6 +69,13 @@ export function toolLabel( use ) {
 			);
 		case 'save_term':
 			return __( 'Créer ou modifier un terme', 'upsidly-agent' );
+		case 'db_query_write':
+			return __(
+				'Requête d’écriture sur la base de données',
+				'upsidly-agent'
+			);
+		case 'run_php':
+			return __( 'Exécution de code PHP', 'upsidly-agent' );
 		case 'db_query_read':
 			return __(
 				'Requête en lecture sur la base de données',
