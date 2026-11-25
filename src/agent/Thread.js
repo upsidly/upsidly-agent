@@ -4,7 +4,8 @@
 import { createElement } from '@wordpress/element';
 
 import Markdown from './Markdown';
-import ToolStep from './ToolStep';
+import ToolStep, { toolLabel } from './ToolStep';
+import ActionCard from './ActionCard';
 
 /**
  * Blocs d'un contenu (texte simple → bloc texte).
@@ -19,7 +20,18 @@ function blocksOf( content ) {
 	return Array.isArray( content ) ? content : [];
 }
 
-export default function Thread( { messages } ) {
+export default function Thread( {
+	messages,
+	actions = [],
+	onDecide,
+	onUndo,
+	busy,
+} ) {
+	const byUse = {};
+	actions.forEach( ( action ) => {
+		byUse[ action.tool_use_id ] = action;
+	} );
+
 	const results = {};
 	messages.forEach( ( message ) => {
 		if ( message.role !== 'user' ) {
@@ -49,6 +61,17 @@ export default function Thread( { messages } ) {
 							<Markdown text={ block.text } />
 						</div>
 					)
+				);
+			} else if ( block.type === 'tool_use' && byUse[ block.id ] ) {
+				items.push(
+					<ActionCard
+						key={ key }
+						action={ byUse[ block.id ] }
+						fallbackTitle={ toolLabel( block ) }
+						onDecide={ onDecide }
+						onUndo={ onUndo }
+						busy={ busy }
+					/>
 				);
 			} else if ( block.type === 'tool_use' ) {
 				items.push(

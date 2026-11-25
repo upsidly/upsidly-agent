@@ -108,6 +108,64 @@ class Upsidly_Agent_Guard {
 	}
 
 	/**
+	 * Chemin d'un fichier à créer : dans wp-content, sans « .. », parent existant ou créable dans wp-content.
+	 *
+	 * @param string $relative Chemin relatif à wp-content.
+	 * @return string|WP_Error Chemin absolu (non résolu, le fichier n'existe pas encore).
+	 */
+	public static function resolve_new( $relative ) {
+		$relative = str_replace( '\\', '/', trim( (string) $relative ) );
+		$relative = (string) preg_replace( '#^/?wp-content/#', '', $relative );
+		$relative = ltrim( $relative, '/' );
+
+		if ( '' === $relative || false !== strpos( $relative, "\0" ) || preg_match( '#(^|/)\.\.?(/|$)#', $relative ) ) {
+			return new WP_Error( 'upsidly_agent_path', __( 'Chemin invalide.', 'upsidly-agent' ) );
+		}
+
+		$root   = self::root();
+		$target = $root . '/' . $relative;
+
+		// Ancêtre existant le plus proche : doit être dans wp-content (pas de lien symbolique sortant).
+		$ancestor    = dirname( $target );
+		$root_length = strlen( $root );
+		$length      = strlen( $ancestor );
+		while ( ! file_exists( $ancestor ) && $length > $root_length ) {
+			$ancestor = dirname( $ancestor );
+			$length   = strlen( $ancestor );
+		}
+		$real = realpath( $ancestor );
+		if ( false === $real || ( $real !== $root && 0 !== strpos( $real . '/', $root . '/' ) ) ) {
+			return new WP_Error( 'upsidly_agent_path', __( 'Accès refusé : seul le dossier wp-content est accessible.', 'upsidly-agent' ) );
+		}
+
+		$error = self::denied( $target );
+		return $error ? $error : $target;
+	}
+
+	/**
+	 * Code PHP syntaxiquement valide ?
+	 *
+	 * @param string $code Code.
+	 * @return true|WP_Error
+	 */
+	public static function php_syntax( $code ) {
+		try {
+			token_get_all( (string) $code, TOKEN_PARSE );
+		} catch ( ParseError $e ) {
+			return new WP_Error(
+				'upsidly_agent_syntax',
+				sprintf(
+					/* translators: 1: message d'erreur, 2: ligne. */
+					__( 'Erreur de syntaxe PHP : %1$s (ligne %2$d). Rien n\'a été écrit.', 'upsidly-agent' ),
+					$e->getMessage(),
+					$e->getLine()
+				)
+			);
+		}
+		return true;
+	}
+
+	/**
 	 * Chemin interdit ?
 	 *
 	 * @param string $real Chemin absolu réel.

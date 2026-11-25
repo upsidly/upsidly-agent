@@ -107,6 +107,44 @@ class Upsidly_Agent_Agent_Rest {
 		);
 		register_rest_route(
 			$ns,
+			'/agent/conversations/' . $id . '/undo-all',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'undo_all' ),
+				'permission_callback' => array( __CLASS__, 'can_access' ),
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/agent/actions/(?P<action>\d+)/decide',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'decide' ),
+				'permission_callback' => array( __CLASS__, 'can_access_action' ),
+				'args'                => array(
+					'decision' => array(
+						'type'     => 'string',
+						'required' => true,
+						'enum'     => array( 'approve', 'reject' ),
+					),
+					'comment'  => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+				),
+			)
+		);
+		register_rest_route(
+			$ns,
+			'/agent/actions/(?P<action>\d+)/undo',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( __CLASS__, 'undo' ),
+				'permission_callback' => array( __CLASS__, 'can_access_action' ),
+			)
+		);
+		register_rest_route(
+			$ns,
 			'/agent/ack',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -128,6 +166,53 @@ class Upsidly_Agent_Agent_Rest {
 		}
 		$conversation = Upsidly_Agent_Agent_Store::get( (string) $request['id'] );
 		return $conversation && get_current_user_id() === (int) $conversation['user_id'];
+	}
+
+	/**
+	 * Accès à une action : agent utilisable et conversation de l'utilisateur.
+	 *
+	 * @param WP_REST_Request $request Requête.
+	 * @return bool
+	 */
+	public static function can_access_action( $request ) {
+		if ( ! self::can_use() ) {
+			return false;
+		}
+		$action       = Upsidly_Agent_Agent_Store::get_action( (int) $request['action'] );
+		$conversation = $action ? Upsidly_Agent_Agent_Store::get( (string) $action['conversation_id'] ) : null;
+		return $conversation && get_current_user_id() === (int) $conversation['user_id'];
+	}
+
+	/**
+	 * POST /agent/actions/{id}/decide.
+	 *
+	 * @param WP_REST_Request $request Requête.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function decide( $request ) {
+		$result = Upsidly_Agent_Agent_Loop::decide( (int) $request['action'], (string) $request->get_param( 'decision' ), (string) $request->get_param( 'comment' ) );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * POST /agent/actions/{id}/undo.
+	 *
+	 * @param WP_REST_Request $request Requête.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function undo( $request ) {
+		$result = Upsidly_Agent_Agent_Loop::undo( (int) $request['action'] );
+		return is_wp_error( $result ) ? $result : rest_ensure_response( $result );
+	}
+
+	/**
+	 * POST /agent/conversations/{id}/undo-all.
+	 *
+	 * @param WP_REST_Request $request Requête.
+	 * @return WP_REST_Response
+	 */
+	public static function undo_all( $request ) {
+		return rest_ensure_response( Upsidly_Agent_Agent_Loop::undo_all( (string) $request['id'] ) );
 	}
 
 	/**
@@ -256,6 +341,7 @@ class Upsidly_Agent_Agent_Rest {
 				'steps'   => (int) $conversation['steps'],
 			) : null,
 			'messages'     => Upsidly_Agent_Agent_Store::messages( $id ),
+			'actions'      => Upsidly_Agent_Agent_Loop::actions_payload( $id ),
 		);
 	}
 }

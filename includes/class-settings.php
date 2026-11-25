@@ -469,7 +469,7 @@ class Upsidly_Agent_Settings {
 								<input type="checkbox" name="<?php echo esc_attr( self::OPTION_AGENT ); ?>" value="1" <?php checked( self::agent_enabled() ); ?> />
 								<?php esc_html_e( 'Activer l\'agent sur ce site', 'upsidly-agent' ); ?>
 							</label>
-							<p class="description"><?php esc_html_e( 'L\'agent peut lire les fichiers des thèmes et des extensions, les journaux d\'erreurs, les réglages, les contenus et la base de données pour diagnostiquer un problème. Il est réservé aux administrateurs et doit aussi être activé pour ce site par Upsidly.', 'upsidly-agent' ); ?></p>
+							<p class="description"><?php esc_html_e( 'L\'agent peut lire les fichiers des thèmes et des extensions, les journaux d\'erreurs, les réglages, les contenus et la base de données pour diagnostiquer un problème, et proposer des modifications (fichiers, extensions, réglages, contenus) que vous validez une par une. Chaque modification est sauvegardée et peut être annulée. Il est réservé aux administrateurs et doit aussi être activé pour ce site par Upsidly.', 'upsidly-agent' ); ?></p>
 						</td>
 					</tr>
 				</table>

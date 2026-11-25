@@ -32,6 +32,10 @@ const STATUS_TEXT = {
 		'upsidly-agent'
 	),
 	stopped: __( 'Arrêté.', 'upsidly-agent' ),
+	awaiting: __(
+		'L’agent attend votre décision sur la modification proposée ci-dessus.',
+		'upsidly-agent'
+	),
 	budget: __(
 		'Le budget de cette conversation est épuisé. Commencez une nouvelle conversation pour continuer.',
 		'upsidly-agent'
@@ -73,6 +77,8 @@ export default function AgentApp( { config } ) {
 	const [ messages, setMessages ] = useState( [] );
 	const [ convStatus, setConvStatus ] = useState( 'idle' );
 	const [ convCredits, setConvCredits ] = useState( 0 );
+	const [ actions, setActions ] = useState( [] );
+	const [ deciding, setDeciding ] = useState( false );
 	const [ busy, setBusy ] = useState( false );
 	const [ error, setError ] = useState( null );
 	const [ draft, setDraft ] = useState( '' );
@@ -128,6 +134,9 @@ export default function AgentApp( { config } ) {
 					setMessages( ( current ) =>
 						mergeMessages( current, res.messages )
 					);
+					if ( res.actions ) {
+						setActions( res.actions );
+					}
 					setConvStatus( res.status );
 					if (
 						res.conversation &&
@@ -168,6 +177,7 @@ export default function AgentApp( { config } ) {
 			.then( ( res ) => {
 				setCurrentId( id );
 				setMessages( res.messages || [] );
+				setActions( res.actions || [] );
 				setConvStatus(
 					res.conversation ? res.conversation.status : 'idle'
 				);
@@ -190,9 +200,81 @@ export default function AgentApp( { config } ) {
 		}
 		setCurrentId( null );
 		setMessages( [] );
+		setActions( [] );
 		setConvStatus( 'idle' );
 		setConvCredits( 0 );
 		setError( null );
+	};
+
+	const decide = ( action, decision, comment = '' ) => {
+		if ( deciding ) {
+			return;
+		}
+		setDeciding( true );
+		setError( null );
+		apiFetch( {
+			path: `${ API }/actions/${ action.id }/decide`,
+			method: 'POST',
+			data: { decision, comment },
+		} )
+			.then( ( res ) => {
+				setActions( res.actions || [] );
+				setConvStatus( res.status );
+				if ( res.status === 'running' && currentId ) {
+					runLoop( currentId );
+				}
+			} )
+			.catch( ( e ) => setError( errorMessage( e ) ) )
+			.finally( () => setDeciding( false ) );
+	};
+
+	const undo = ( action ) => {
+		if (
+			// eslint-disable-next-line no-alert
+			! window.confirm(
+				__(
+					'Annuler cette modification et revenir à l’état précédent ?',
+					'upsidly-agent'
+				)
+			)
+		) {
+			return;
+		}
+		setDeciding( true );
+		apiFetch( {
+			path: `${ API }/actions/${ action.id }/undo`,
+			method: 'POST',
+		} )
+			.then( ( res ) => setActions( res.actions || [] ) )
+			.catch( ( e ) => setError( errorMessage( e ) ) )
+			.finally( () => setDeciding( false ) );
+	};
+
+	const undoAll = () => {
+		if (
+			// eslint-disable-next-line no-alert
+			! window.confirm(
+				__(
+					'Annuler toutes les modifications appliquées dans cette conversation, de la plus récente à la plus ancienne ?',
+					'upsidly-agent'
+				)
+			)
+		) {
+			return;
+		}
+		setDeciding( true );
+		apiFetch( {
+			path: `${ API }/conversations/${ currentId }/undo-all`,
+			method: 'POST',
+		} )
+			.then( ( res ) => {
+				setActions( res.actions || [] );
+				if ( res.errors && res.errors.length ) {
+					setError( res.errors.join( ' · ' ) );
+				}
+			} )
+			.catch( ( e ) => setError( errorMessage( e ) ) )
+			.finally( () => setDeciding( false ) );
 	};
 
 	const send = ( text ) => {
@@ -238,7 +320,12 @@ export default function AgentApp( { config } ) {
 				path: `${ API }/conversations/${ currentId }/stop`,
 				method: 'POST',
 			} )
-				.then( () => setConvStatus( 'stopped' ) )
+				.then( ( res ) => {
+					setConvStatus( 'stopped' );
+					if ( res && res.actions ) {
+						setActions( res.actions );
+					}
+				} )
 				.catch( () => {} );
 		}
 	};
@@ -343,7 +430,7 @@ export default function AgentApp( { config } ) {
 							</p>
 							<p>
 								{ __(
-									'L’agent lit les fichiers des thèmes et des extensions, les journaux d’erreurs, les réglages, les contenus et la base de données de ce site pour diagnostiquer vos problèmes. Ces informations sont transmises à Upsidly et à son fournisseur d’IA (Anthropic). Les mots de passe, clés et données personnelles sont masqués avant tout envoi. Dans cette version, l’agent ne modifie rien sur le site.',
+									'L’agent lit les fichiers des thèmes et des extensions, les journaux d’erreurs, les réglages, les contenus et la base de données de ce site pour diagnostiquer vos problèmes. Ces informations sont transmises à Upsidly et à son fournisseur d’IA (Anthropic). Les mots de passe, clés et données personnelles sont masqués avant tout envoi. L’agent peut proposer des modifications (fichiers, extensions, réglages, contenus) : rien n’est modifié sans votre clic sur « Appliquer », chaque modification est sauvegardée et peut être annulée.',
 									'upsidly-agent'
 								) }
 							</p>
@@ -384,7 +471,13 @@ export default function AgentApp( { config } ) {
 							</div>
 						</div>
 					) : (
-						<Thread messages={ messages } />
+						<Thread
+							messages={ messages }
+							actions={ actions }
+							onDecide={ decide }
+							onUndo={ undo }
+							busy={ deciding || busy }
+						/>
 					) }
 
 					{ busy && (
@@ -423,6 +516,16 @@ export default function AgentApp( { config } ) {
 						aria-label={ __( 'Votre message', 'upsidly-agent' ) }
 					/>
 					<div className="upsidly-chat__composer-bar">
+						{ actions.some( ( action ) => action.can_undo ) && (
+							<Button
+								variant="link"
+								isDestructive
+								onClick={ undoAll }
+								disabled={ busy || deciding }
+							>
+								{ __( 'Tout annuler', 'upsidly-agent' ) }
+							</Button>
+						) }
 						<span className="upsidly-chat__meta">
 							{ currentId && (
 								<Fragment>

@@ -41,6 +41,9 @@ final class Upsidly_Agent_Plugin {
 		'agent/class-guard.php'                   => 'Upsidly_Agent_Guard',
 		'agent/class-agent-store.php'             => 'Upsidly_Agent_Agent_Store',
 		'agent/class-tool-registry.php'           => 'Upsidly_Agent_Tool_Registry',
+		'agent/class-backup.php'                  => 'Upsidly_Agent_Backup',
+		'agent/class-health-check.php'            => 'Upsidly_Agent_Health_Check',
+		'agent/tools/class-tools-write.php'       => 'Upsidly_Agent_Tools_Write',
 		'agent/tools/class-tools-files.php'       => 'Upsidly_Agent_Tools_Files',
 		'agent/tools/class-tools-diagnostics.php' => 'Upsidly_Agent_Tools_Diagnostics',
 		'agent/tools/class-tools-settings.php'    => 'Upsidly_Agent_Tools_Settings',
@@ -53,7 +56,7 @@ final class Upsidly_Agent_Plugin {
 	/**
 	 * Version du schéma (tables, capacités, crons) : déclenche la mise à niveau.
 	 */
-	const SCHEMA_VERSION = '0.2.0';
+	const SCHEMA_VERSION = '0.3.0';
 	const SCHEMA_OPTION  = 'upsidly_agent_schema';
 	const PURGE_HOOK     = 'upsidly_agent_daily_purge';
 

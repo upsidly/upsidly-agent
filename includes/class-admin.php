@@ -372,7 +372,16 @@ class Upsidly_Agent_Admin {
 							<td><?php echo esc_html( $row['date'] ); ?></td>
 							<td><?php echo esc_html( $row['user'] ); ?></td>
 							<td><?php echo esc_html( $row['skill'] ); ?></td>
-							<td><?php echo esc_html( 'apply' === $row['action'] ? __( 'Application', 'upsidly-agent' ) : __( 'Génération', 'upsidly-agent' ) ); ?></td>
+							<td>
+								<?php
+								$upsidly_agent_actions = array(
+									'apply' => __( 'Application', 'upsidly-agent' ),
+									'agent' => __( 'Agent : modification', 'upsidly-agent' ),
+									'undo'  => __( 'Annulation', 'upsidly-agent' ),
+								);
+								echo esc_html( $upsidly_agent_actions[ $row['action'] ] ?? __( 'Génération', 'upsidly-agent' ) );
+								?>
+							</td>
 							<td>
 								<?php if ( '' !== $row['edit_url'] ) : ?>
 									<a href="<?php echo esc_url( $row['edit_url'] ); ?>"><?php echo esc_html( '' !== $row['post_title'] ? $row['post_title'] : '#' . $row['post_id'] ); ?></a>

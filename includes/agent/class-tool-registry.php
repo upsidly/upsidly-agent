@@ -34,6 +34,9 @@ class Upsidly_Agent_Tool_Registry {
 			'get_content'   => array( 'Upsidly_Agent_Tools_Content', 'get_content', self::RISK_READ ),
 			'db_query_read' => array( 'Upsidly_Agent_Tools_Database', 'db_query_read', self::RISK_READ ),
 		);
+		foreach ( array( 'edit_file', 'create_file', 'plugin_activate', 'plugin_deactivate', 'theme_activate', 'plugin_update', 'theme_update', 'plugin_install', 'update_option', 'save_content' ) as $write ) {
+			$tools[ $write ] = array( 'Upsidly_Agent_Tools_Write', $write, self::RISK_WRITE );
+		}
 
 		/**
 		 * Filtre le registre des outils (tests, lots suivants).
@@ -55,6 +58,76 @@ class Upsidly_Agent_Tool_Registry {
 	}
 
 	/**
+	 * Écritures autorisées pour ce site ? (niveau d'agent du site côté proxy : write ou full).
+	 *
+	 * @return bool
+	 */
+	public static function writes_allowed() {
+		$status = Upsidly_Agent_Rest::status();
+		$level  = is_array( $status ) ? (string) ( $status['agent']['level'] ?? 'off' ) : 'off';
+		return in_array( $level, array( 'write', 'full' ), true );
+	}
+
+	/**
+	 * Aperçu d'un outil d'écriture (rien n'est modifié).
+	 *
+	 * @param string $name  Outil.
+	 * @param mixed  $input Entrées.
+	 * @return array{ok: bool, title: string, preview: string, error?: string}
+	 */
+	public static function preview( $name, $input ) {
+		$tools = self::tools();
+		if ( ! isset( $tools[ $name ] ) || self::RISK_READ === $tools[ $name ][2] ) {
+			return array(
+				'ok'      => false,
+				'title'   => '',
+				'preview' => '',
+				'error'   => sprintf( 'Outil « %s » indisponible.', $name ),
+			);
+		}
+		try {
+			return call_user_func( array( $tools[ $name ][0], 'preview_' . $tools[ $name ][1] ), is_array( $input ) ? $input : array() );
+		} catch ( Throwable $e ) {
+			return array(
+				'ok'      => false,
+				'title'   => '',
+				'preview' => '',
+				'error'   => 'Erreur pendant la préparation : ' . Upsidly_Agent_Guard::redact_text( $e->getMessage() ),
+			);
+		}
+	}
+
+	/**
+	 * Applique un outil d'écriture validé.
+	 *
+	 * @param string $name      Outil.
+	 * @param mixed  $input     Entrées.
+	 * @param int    $action_id Action.
+	 * @return array{status: string, content: string, is_error: bool, backup_id: int}
+	 */
+	public static function apply( $name, $input, $action_id ) {
+		$tools = self::tools();
+		if ( ! isset( $tools[ $name ] ) || self::RISK_READ === $tools[ $name ][2] ) {
+			return array(
+				'status'    => 'failed',
+				'content'   => sprintf( 'Outil « %s » indisponible.', $name ),
+				'is_error'  => true,
+				'backup_id' => 0,
+			);
+		}
+		try {
+			return call_user_func( array( $tools[ $name ][0], 'apply_' . $tools[ $name ][1] ), is_array( $input ) ? $input : array(), (int) $action_id );
+		} catch ( Throwable $e ) {
+			return array(
+				'status'    => 'failed',
+				'content'   => 'Erreur pendant l\'application : ' . Upsidly_Agent_Guard::redact_text( $e->getMessage() ),
+				'is_error'  => true,
+				'backup_id' => 0,
+			);
+		}
+	}
+
+	/**
 	 * Exécute un outil et renvoie le résultat pour l'IA.
 	 *
 	 * @param string $name  Outil.
@@ -71,7 +144,7 @@ class Upsidly_Agent_Tool_Registry {
 		}
 		if ( self::RISK_READ !== $tools[ $name ][2] ) {
 			return array(
-				'content'  => 'Les actions qui modifient le site ne sont pas encore disponibles dans cette version de l\'agent. Explique à la personne la modification à faire.',
+				'content'  => 'Cette action modifie le site : elle doit être validée par la personne.',
 				'is_error' => true,
 			);
 		}

@@ -64,17 +64,22 @@ CREATE TABLE {$messages} (
 CREATE TABLE {$actions} (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   conversation_id CHAR(26) NOT NULL,
+  tool_use_id VARCHAR(64) NOT NULL DEFAULT '',
   tool VARCHAR(64) NOT NULL,
   risk VARCHAR(10) NOT NULL,
+  title VARCHAR(255) NULL,
   input LONGTEXT NOT NULL,
+  preview LONGTEXT NULL,
   status VARCHAR(20) NOT NULL,
+  result LONGTEXT NULL,
   backup_id BIGINT UNSIGNED NULL,
   result_summary VARCHAR(255) NULL,
   decided_by BIGINT UNSIGNED NULL,
   created_at DATETIME NOT NULL,
   decided_at DATETIME NULL,
   PRIMARY KEY  (id),
-  KEY conversation (conversation_id)
+  KEY conversation (conversation_id),
+  KEY tool_use (conversation_id,tool_use_id)
 ) {$charset};
 CREATE TABLE {$backups} (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -246,6 +251,107 @@ CREATE TABLE {$backups} (
 			},
 			is_array( $rows ) ? $rows : array()
 		);
+	}
+
+	/**
+	 * Enregistre une action (demande d'outil) de l'agent.
+	 *
+	 * @param string $conversation_id Conversation.
+	 * @param array  $fields          tool_use_id, tool, risk, title, input, preview, status, result (array{content, is_error}).
+	 * @return int Identifiant de l'action.
+	 */
+	public static function add_action( $conversation_id, array $fields ) {
+		global $wpdb;
+		$result = $fields['result'] ?? null;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- table propre au plugin.
+		$wpdb->insert(
+			self::table( 'actions' ),
+			array(
+				'conversation_id' => (string) $conversation_id,
+				'tool_use_id'     => mb_substr( (string) ( $fields['tool_use_id'] ?? '' ), 0, 64 ),
+				'tool'            => mb_substr( (string) ( $fields['tool'] ?? '' ), 0, 64 ),
+				'risk'            => mb_substr( (string) ( $fields['risk'] ?? 'read' ), 0, 10 ),
+				'title'           => mb_substr( (string) ( $fields['title'] ?? '' ), 0, 255 ),
+				'input'           => (string) wp_json_encode( $fields['input'] ?? array(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE ),
+				'preview'         => (string) ( $fields['preview'] ?? '' ),
+				'status'          => (string) ( $fields['status'] ?? 'done' ),
+				'result'          => null === $result ? null : (string) wp_json_encode( $result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE ),
+				'result_summary'  => null === $result ? null : mb_substr( (string) ( $result['content'] ?? '' ), 0, 255 ),
+				'created_at'      => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Met à jour une action.
+	 *
+	 * @param int   $action_id Action.
+	 * @param array $fields    status, result (array{content, is_error}), backup_id, decided_by.
+	 */
+	public static function update_action( $action_id, array $fields ) {
+		global $wpdb;
+		$data = array();
+		if ( isset( $fields['status'] ) ) {
+			$data['status'] = (string) $fields['status'];
+		}
+		if ( array_key_exists( 'result', $fields ) ) {
+			$data['result']         = (string) wp_json_encode( $fields['result'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE );
+			$data['result_summary'] = mb_substr( (string) ( $fields['result']['content'] ?? '' ), 0, 255 );
+		}
+		if ( isset( $fields['backup_id'] ) ) {
+			$data['backup_id'] = (int) $fields['backup_id'];
+		}
+		if ( isset( $fields['decided_by'] ) ) {
+			$data['decided_by'] = (int) $fields['decided_by'];
+			$data['decided_at'] = gmdate( 'Y-m-d H:i:s' );
+		}
+		if ( $data ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- table propre au plugin.
+			$wpdb->update( self::table( 'actions' ), $data, array( 'id' => (int) $action_id ) );
+		}
+	}
+
+	/**
+	 * Décode une ligne d'action.
+	 *
+	 * @param array $row Ligne.
+	 * @return array
+	 */
+	private static function decode_action( array $row ) {
+		$row['id']        = (int) $row['id'];
+		$row['backup_id'] = (int) $row['backup_id'];
+		$row['input']     = json_decode( (string) $row['input'], true );
+		$row['result']    = null === $row['result'] ? null : json_decode( (string) $row['result'], true );
+		return $row;
+	}
+
+	/**
+	 * Action par identifiant.
+	 *
+	 * @param int $action_id Action.
+	 * @return array|null
+	 */
+	public static function get_action( $action_id ) {
+		global $wpdb;
+		$table = self::table( 'actions' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table propre au plugin.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $action_id ), ARRAY_A );
+		return is_array( $row ) ? self::decode_action( $row ) : null;
+	}
+
+	/**
+	 * Actions d'une conversation, dans l'ordre.
+	 *
+	 * @param string $conversation_id Conversation.
+	 * @return array<int, array>
+	 */
+	public static function actions( $conversation_id ) {
+		global $wpdb;
+		$table = self::table( 'actions' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table propre au plugin.
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE conversation_id = %s ORDER BY id ASC", (string) $conversation_id ), ARRAY_A );
+		return array_map( array( __CLASS__, 'decode_action' ), is_array( $rows ) ? $rows : array() );
 	}
 
 	/**
