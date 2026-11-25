@@ -339,7 +339,24 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$this->assertSame( 'draft', $product->get_status() );
 		$this->assertSame( 'TSL', $product->get_sku() );
 		$this->assertStringContainsString( '<strong>respirant</strong>', $product->get_short_description() );
-		$this->assertCount( 2, $product->get_children() );
+		$debug = array(
+			'notes'      => $data['result']['notes'],
+			'attributs'  => array_map(
+				static function ( $attribute ) {
+					return array( $attribute->get_name(), $attribute->get_variation(), $attribute->is_taxonomy() ? wc_attribute_label( $attribute->get_name() ) : '' );
+				},
+				$product->get_attributes()
+			),
+			'variations' => get_posts(
+				array(
+					'post_type'   => 'product_variation',
+					'post_parent' => $product->get_id(),
+					'post_status' => 'any',
+					'fields'      => 'ids',
+				)
+			),
+		);
+		$this->assertCount( 2, $product->get_children(), wp_json_encode( $debug ) );
 		$this->assertSame( 'variable', $data['result']['produit']['type'] );
 		$this->assertSame( 2, $data['result']['produit']['variations'] );
 
