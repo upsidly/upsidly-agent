@@ -390,6 +390,42 @@ class Upsidly_Agent_Settings {
 				</div>
 			<?php endif; ?>
 
+			<h2><?php esc_html_e( 'Tableau de bord Upsidly', 'upsidly-agent' ); ?></h2>
+			<?php $link = Upsidly_Agent_Connector::get(); ?>
+			<?php if ( null !== $link ) : ?>
+				<p>
+					<strong class="upsidly-agent-ok"><?php esc_html_e( 'Site relié à votre compte Upsidly.', 'upsidly-agent' ); ?></strong>
+					<span class="description">
+						<?php
+						$linked_by = get_userdata( $link['user_id'] );
+						echo esc_html(
+							sprintf(
+								/* translators: 1: date, 2: identifiant de l'administrateur. */
+								__( 'Relié le %1$s par %2$s. Les actions demandées depuis le tableau de bord s\'exécutent avec les droits de cet administrateur.', 'upsidly-agent' ),
+								wp_date( get_option( 'date_format' ), $link['linked_at'] ),
+								$linked_by ? $linked_by->user_login : '?'
+							)
+						);
+						?>
+					</span>
+				</p>
+				<p>
+					<a class="button button-primary" href="<?php echo esc_url( Upsidly_Agent_Connector::dashboard_url() ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Ouvrir mon tableau de bord', 'upsidly-agent' ); ?></a>
+				</p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('<?php echo esc_js( __( 'Délier ce site ? Upsidly ne pourra plus agir dessus depuis le tableau de bord.', 'upsidly-agent' ) ); ?>');">
+					<input type="hidden" name="action" value="upsidly_agent_unlink" />
+					<?php wp_nonce_field( 'upsidly_agent_unlink' ); ?>
+					<?php submit_button( __( 'Délier ce site', 'upsidly-agent' ), 'link-delete', 'submit', false ); ?>
+				</form>
+			<?php else : ?>
+				<p><?php esc_html_e( 'Reliez ce site à votre compte Upsidly pour piloter l\'agent et la rédaction depuis votre tableau de bord. Aucune clé à copier : vous approuvez la liaison sur upsidly.app.', 'upsidly-agent' ); ?></p>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+					<input type="hidden" name="action" value="upsidly_agent_link" />
+					<?php wp_nonce_field( 'upsidly_agent_link' ); ?>
+					<?php submit_button( __( 'Relier à Upsidly', 'upsidly-agent' ), 'primary', 'submit', false ); ?>
+				</form>
+			<?php endif; ?>
+
 			<h2><?php esc_html_e( 'État de la connexion', 'upsidly-agent' ); ?></h2>
 			<p>
 				<?php

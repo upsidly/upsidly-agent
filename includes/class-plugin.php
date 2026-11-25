@@ -38,6 +38,7 @@ final class Upsidly_Agent_Plugin {
 		'class-rest.php'                          => 'Upsidly_Agent_Rest',
 		'class-heartbeat.php'                     => 'Upsidly_Agent_Heartbeat',
 		'class-admin.php'                         => 'Upsidly_Agent_Admin',
+		'class-connector.php'                     => 'Upsidly_Agent_Connector',
 		'agent/class-guard.php'                   => 'Upsidly_Agent_Guard',
 		'agent/class-agent-store.php'             => 'Upsidly_Agent_Agent_Store',
 		'agent/class-tool-registry.php'           => 'Upsidly_Agent_Tool_Registry',
@@ -95,6 +96,7 @@ final class Upsidly_Agent_Plugin {
 		Upsidly_Agent_Heartbeat::init();
 		Upsidly_Agent_Admin::init();
 		Upsidly_Agent_Agent_Rest::init();
+		Upsidly_Agent_Connector::init();
 
 		add_action( 'admin_init', array( __CLASS__, 'maybe_upgrade' ) );
 		add_action( self::PURGE_HOOK, array( 'Upsidly_Agent_Agent_Store', 'purge' ) );

@@ -287,7 +287,7 @@ class Upsidly_Agent_Agent_Loop {
 	 * @param string $id   Conversation.
 	 * @param array  $uses Blocs tool_use.
 	 */
-	private static function register_actions( $id, array $uses ) {
+	public static function register_actions( $id, array $uses ) {
 		$known = array();
 		foreach ( Upsidly_Agent_Agent_Store::actions( $id ) as $action ) {
 			$known[ $action['tool_use_id'] ] = true;
@@ -395,7 +395,7 @@ class Upsidly_Agent_Agent_Loop {
 	 * @param array  $content Contenu assistant.
 	 * @return array
 	 */
-	private static function results_for( $id, array $content ) {
+	public static function results_for( $id, array $content ) {
 		$by_use = array();
 		foreach ( Upsidly_Agent_Agent_Store::actions( $id ) as $action ) {
 			$by_use[ $action['tool_use_id'] ] = $action;

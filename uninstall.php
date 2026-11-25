@@ -14,7 +14,7 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 function upsidly_agent_uninstall_site() {
 	global $wpdb;
 
-	foreach ( array( 'upsidly_agent_key', 'upsidly_agent_site_description', 'upsidly_agent_brand_voice', 'upsidly_agent_connection', 'upsidly_agent_agent_enabled', 'upsidly_agent_schema' ) as $upsidly_agent_option ) {
+	foreach ( array( 'upsidly_agent_key', 'upsidly_agent_site_description', 'upsidly_agent_brand_voice', 'upsidly_agent_connection', 'upsidly_agent_agent_enabled', 'upsidly_agent_schema', 'upsidly_agent_connector' ) as $upsidly_agent_option ) {
 		delete_option( $upsidly_agent_option );
 	}
 	delete_transient( 'upsidly_agent_status' );

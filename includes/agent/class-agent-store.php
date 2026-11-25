@@ -145,6 +145,36 @@ CREATE TABLE {$backups} (
 	}
 
 	/**
+	 * Crée la conversation si elle n'existe pas (identifiant fourni par Upsidly, connecteur).
+	 *
+	 * @param string $id      Identifiant (26 caractères).
+	 * @param int    $user_id Utilisateur.
+	 * @param string $title   Titre.
+	 */
+	public static function ensure( $id, $user_id, $title ) {
+		global $wpdb;
+		if ( null !== self::get( $id ) ) {
+			return;
+		}
+		$now = gmdate( 'Y-m-d H:i:s' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- table propre au plugin.
+		$wpdb->insert(
+			self::table( 'conversations' ),
+			array(
+				'id'         => $id,
+				'user_id'    => (int) $user_id,
+				'title'      => mb_substr( '' !== $title ? $title : 'Conversation depuis le tableau de bord', 0, 190 ),
+				'status'     => 'idle',
+				'credits'    => 0,
+				'steps'      => 0,
+				'created_at' => $now,
+				'updated_at' => $now,
+			),
+			array( '%s', '%d', '%s', '%s', '%d', '%d', '%s', '%s' )
+		);
+	}
+
+	/**
 	 * Conversation par identifiant.
 	 *
 	 * @param string $id Identifiant.

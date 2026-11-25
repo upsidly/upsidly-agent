@@ -17,6 +17,22 @@ class Upsidly_Agent_Tool_Registry {
 	const RISK_DANGEROUS = 'dangerous';
 
 	/**
+	 * Niveau d'agent imposé par une demande signée d'Upsidly (connecteur), sinon null.
+	 *
+	 * @var string|null
+	 */
+	private static $level = null;
+
+	/**
+	 * Impose le niveau d'agent pour la requête courante (demande signée du connecteur).
+	 *
+	 * @param string|null $level off | read | write | full.
+	 */
+	public static function set_level( $level ) {
+		self::$level = in_array( $level, array( 'off', 'read', 'write', 'full' ), true ) ? $level : null;
+	}
+
+	/**
 	 * Outils disponibles : nom => [classe, méthode, risque].
 	 *
 	 * @return array<string, array{0: string, 1: string, 2: string}>
@@ -94,6 +110,9 @@ class Upsidly_Agent_Tool_Registry {
 	 * @return string
 	 */
 	private static function site_level() {
+		if ( null !== self::$level ) {
+			return self::$level;
+		}
 		$status = Upsidly_Agent_Rest::status();
 		return is_array( $status ) ? (string) ( $status['agent']['level'] ?? 'off' ) : 'off';
 	}
