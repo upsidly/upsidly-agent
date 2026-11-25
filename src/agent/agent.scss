@@ -2,6 +2,15 @@
 	margin: 0 0 0 -20px;
 }
 
+/* Pas de bas de page WordPress sous le chat plein écran. */
+#wpfooter {
+	display: none;
+}
+
+#wpbody-content {
+	padding-bottom: 0;
+}
+
 .upsidly-chat {
 	display: grid;
 	grid-template-columns: 260px 1fr;
@@ -150,6 +159,7 @@
 }
 
 .upsidly-chat-msg {
+
 	&.is-user {
 		display: flex;
 		justify-content: flex-end;
@@ -162,7 +172,7 @@
 		background: #2563eb;
 		color: #fff;
 		white-space: pre-wrap;
-		word-wrap: break-word;
+		overflow-wrap: break-word;
 	}
 }
 
@@ -261,7 +271,7 @@
 			border-radius: 6px;
 			background: #f6f7f9;
 			white-space: pre-wrap;
-			word-break: break-word;
+			overflow-wrap: anywhere;
 			font-size: 12px;
 		}
 	}

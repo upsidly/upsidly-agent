@@ -42,6 +42,36 @@ class Upsidly_Agent_Admin {
 		add_action( 'admin_init', array( __CLASS__, 'privacy_policy' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'draft_notice' ) );
 		add_action( 'enqueue_block_editor_assets', array( __CLASS__, 'editor_notice' ) );
+		add_filter( 'admin_footer_text', array( __CLASS__, 'footer_text' ), 99 );
+		add_filter( 'update_footer', array( __CLASS__, 'footer_text' ), 99 );
+	}
+
+	/**
+	 * Page du plugin en cours d'affichage ?
+	 *
+	 * @return bool
+	 */
+	public static function is_plugin_screen() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen ) {
+			return false;
+		}
+		foreach ( array( self::SLUG, self::AGENT_SLUG, self::HISTORY_SLUG, Upsidly_Agent_Settings::PAGE ) as $slug ) {
+			if ( str_ends_with( (string) $screen->id, $slug ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Bas de page de l'admin (« Merci de faire de WordPress… » et version) retiré sur les pages du plugin.
+	 *
+	 * @param string $text Texte du bas de page.
+	 * @return string
+	 */
+	public static function footer_text( $text ) {
+		return self::is_plugin_screen() ? '' : $text;
 	}
 
 	/**
