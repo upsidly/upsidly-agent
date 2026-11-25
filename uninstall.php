@@ -14,12 +14,24 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 function upsidly_agent_uninstall_site() {
 	global $wpdb;
 
-	foreach ( array( 'upsidly_agent_key', 'upsidly_agent_site_description', 'upsidly_agent_brand_voice', 'upsidly_agent_connection' ) as $upsidly_agent_option ) {
+	foreach ( array( 'upsidly_agent_key', 'upsidly_agent_site_description', 'upsidly_agent_brand_voice', 'upsidly_agent_connection', 'upsidly_agent_agent_enabled', 'upsidly_agent_schema' ) as $upsidly_agent_option ) {
 		delete_option( $upsidly_agent_option );
 	}
 	delete_transient( 'upsidly_agent_status' );
 	delete_transient( 'upsidly_agent_activation_redirect' );
 	wp_clear_scheduled_hook( 'upsidly_agent_daily_connect' );
+	wp_clear_scheduled_hook( 'upsidly_agent_daily_purge' );
+	delete_metadata( 'user', 0, 'upsidly_agent_ack', '', true );
+
+	$upsidly_agent_role = get_role( 'administrator' );
+	if ( $upsidly_agent_role ) {
+		$upsidly_agent_role->remove_cap( 'upsidly_agent_use' );
+	}
+
+	foreach ( array( 'conversations', 'messages', 'actions', 'backups' ) as $upsidly_agent_table ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- tables propres au plugin.
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}upsidly_agent_{$upsidly_agent_table}" );
+	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange -- table propre au plugin.
 	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}upsidly_agent_log" );

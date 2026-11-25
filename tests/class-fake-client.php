@@ -18,6 +18,13 @@ class Upsidly_Agent_Test_Fake_Client extends Upsidly_Agent_Client {
 	public $responses = array();
 
 	/**
+	 * Files de réponses successives, par chemin (prioritaires sur $responses).
+	 *
+	 * @var array<string, array<int, array>>
+	 */
+	public $queue = array();
+
+	/**
 	 * Requêtes reçues.
 	 *
 	 * @var array<int, array>
@@ -41,6 +48,10 @@ class Upsidly_Agent_Test_Fake_Client extends Upsidly_Agent_Client {
 			'body'    => json_decode( (string) wp_json_encode( $body ), true ),
 			'timeout' => $timeout,
 		);
+
+		if ( ! empty( $this->queue[ $path ] ) ) {
+			return self::normalize( array_shift( $this->queue[ $path ] ) );
+		}
 
 		$response = $this->responses[ $path ] ?? array(
 			'status' => 500,

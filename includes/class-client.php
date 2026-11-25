@@ -73,6 +73,56 @@ class Upsidly_Agent_Client {
 	}
 
 	/**
+	 * POST /v1/agent/turn : une étape de l'agent.
+	 *
+	 * @param string $conversation_id Conversation.
+	 * @param array  $messages        Historique (format API Messages).
+	 * @param array  $context         Contexte du site.
+	 * @param array  $environment     Environnement du site.
+	 * @return array|WP_Error
+	 */
+	public function agent_turn( $conversation_id, array $messages, array $context, array $environment ) {
+		if ( function_exists( 'set_time_limit' ) ) {
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- peut être désactivée par l'hébergeur.
+			@set_time_limit( 180 );
+		}
+
+		return $this->request(
+			'POST',
+			'/v1/agent/turn',
+			array(
+				'conversation_id' => (string) $conversation_id,
+				'messages'        => self::with_objects( $messages ),
+				'context'         => (object) $context,
+				'environment'     => (object) $environment,
+			),
+			self::TIMEOUT_RUN
+		);
+	}
+
+	/**
+	 * Les entrées d'outils vides doivent être encodées en objet JSON ({}), pas en tableau.
+	 *
+	 * @param array $messages Historique.
+	 * @return array
+	 */
+	private static function with_objects( array $messages ) {
+		foreach ( $messages as &$message ) {
+			if ( ! is_array( $message['content'] ) ) {
+				continue;
+			}
+			foreach ( $message['content'] as &$block ) {
+				if ( is_array( $block ) && 'tool_use' === ( $block['type'] ?? '' ) ) {
+					$block['input'] = (object) ( is_array( $block['input'] ?? null ) ? $block['input'] : array() );
+				}
+			}
+			unset( $block );
+		}
+		unset( $message );
+		return $messages;
+	}
+
+	/**
 	 * Mode factice activé ? (constante UPSIDLY_AGENT_FAKE_PROXY, ignorée si WP_DEBUG est faux).
 	 *
 	 * @return bool
@@ -195,6 +245,12 @@ class Upsidly_Agent_Client {
 					__( 'Vos crédits du mois sont épuisés. Ils seront renouvelés le %s.', 'upsidly-agent' ),
 					false !== $time ? wp_date( get_option( 'date_format' ), $time, new DateTimeZone( 'UTC' ) ) : __( '1er du mois prochain', 'upsidly-agent' )
 				);
+
+			case 'uap_agent_disabled':
+				return __( 'L\'agent n\'est pas activé pour ce site. Contactez Upsidly.', 'upsidly-agent' );
+
+			case 'uap_conversation_budget':
+				return __( 'Le budget de cette conversation est épuisé. Commencez une nouvelle conversation pour continuer.', 'upsidly-agent' );
 
 			case 'uap_rate_limited':
 				return __( 'Trop de demandes en peu de temps. Réessayez dans une minute.', 'upsidly-agent' );

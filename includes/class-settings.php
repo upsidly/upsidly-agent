@@ -16,6 +16,7 @@ class Upsidly_Agent_Settings {
 	const OPTION_DESCRIPTION = 'upsidly_agent_site_description';
 	const OPTION_VOICE       = 'upsidly_agent_brand_voice';
 	const OPTION_CONNECTION  = 'upsidly_agent_connection';
+	const OPTION_AGENT       = 'upsidly_agent_agent_enabled';
 	const STATUS_TRANSIENT   = 'upsidly_agent_status';
 	const GROUP              = 'upsidly_agent';
 	const PAGE               = 'upsidly-agent-settings';
@@ -42,7 +43,7 @@ class Upsidly_Agent_Settings {
 	 * Crée les options (autoload désactivé) si elles n'existent pas.
 	 */
 	public static function add_options() {
-		foreach ( array( self::OPTION_KEY, self::OPTION_DESCRIPTION, self::OPTION_VOICE, self::OPTION_CONNECTION ) as $option ) {
+		foreach ( array( self::OPTION_KEY, self::OPTION_DESCRIPTION, self::OPTION_VOICE, self::OPTION_CONNECTION, self::OPTION_AGENT ) as $option ) {
 			if ( false === get_option( $option, false ) ) {
 				add_option( $option, '', '', false );
 			}
@@ -102,6 +103,15 @@ class Upsidly_Agent_Settings {
 	}
 
 	/**
+	 * Agent activé sur ce site (réglage, désactivé par défaut) ?
+	 *
+	 * @return bool
+	 */
+	public static function agent_enabled() {
+		return '1' === (string) get_option( self::OPTION_AGENT, '' );
+	}
+
+	/**
 	 * Dernier état de connexion connu.
 	 *
 	 * @return array{state: string, message: string, date: int}|null
@@ -133,6 +143,18 @@ class Upsidly_Agent_Settings {
 			array(
 				'type'              => 'string',
 				'sanitize_callback' => array( __CLASS__, 'sanitize_description' ),
+				'default'           => '',
+				'show_in_rest'      => false,
+			)
+		);
+		register_setting(
+			self::GROUP,
+			self::OPTION_AGENT,
+			array(
+				'type'              => 'string',
+				'sanitize_callback' => static function ( $value ) {
+					return empty( $value ) ? '' : '1';
+				},
 				'default'           => '',
 				'show_in_rest'      => false,
 			)
@@ -437,6 +459,17 @@ class Upsidly_Agent_Settings {
 						<td>
 							<textarea id="upsidly_agent_brand_voice" name="<?php echo esc_attr( self::OPTION_VOICE ); ?>" rows="5" class="large-text" maxlength="<?php echo esc_attr( (string) self::VOICE_MAX ); ?>"><?php echo esc_textarea( self::get_brand_voice() ); ?></textarea>
 							<p class="description"><?php esc_html_e( 'Par exemple : « Professionnel, chaleureux, vouvoiement ». 2000 caractères maximum.', 'upsidly-agent' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Agent', 'upsidly-agent' ); ?></th>
+						<td>
+							<input type="hidden" name="<?php echo esc_attr( self::OPTION_AGENT ); ?>" value="" />
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( self::OPTION_AGENT ); ?>" value="1" <?php checked( self::agent_enabled() ); ?> />
+								<?php esc_html_e( 'Activer l\'agent sur ce site', 'upsidly-agent' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'L\'agent peut lire les fichiers des thèmes et des extensions, les journaux d\'erreurs, les réglages, les contenus et la base de données pour diagnostiquer un problème. Il est réservé aux administrateurs et doit aussi être activé pour ce site par Upsidly.', 'upsidly-agent' ); ?></p>
 						</td>
 					</tr>
 				</table>

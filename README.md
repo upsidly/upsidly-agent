@@ -67,3 +67,14 @@ La CI GitHub Actions lance PHPUnit (PHP 8.0 + WordPress 6.4, PHP 8.3 + dernière
 3. Le workflow `release.yml` construit `upsidly-agent.zip` (avec `build/` et `vendor/plugin-update-checker/`, sans `src/`, `tests/` ni fichiers de développement) et l'attache à la release GitHub.
 
 Le JSX est compilé en mode classique (`createElement`) pour rester compatible avec WordPress 6.4, où le script `react-jsx-runtime` n'existe pas encore.
+
+## Agent (0.2.0, lot A : lecture et chat)
+
+Page **Upsidly Agent → Agent** : une conversation avec un agent de maintenance qui diagnostique le site.
+
+- **Accès** : administrateurs (capacité `upsidly_agent_use`), réglage « Activer l'agent sur ce site » (désactivé par défaut), et niveau d'agent du site activé côté proxy par Upsidly (`php bin/site.php agent <id> read`). Un avertissement est à accepter une fois par administrateur.
+- **Boucle** pilotée par le plugin : `POST /upsidly-agent/v1/agent/conversations/{id}/step` exécute les outils demandés puis appelle `POST /v1/agent/turn` sur le proxy. Le navigateur rappelle `step` tant que l'agent travaille ; « Arrêter » interrompt la boucle.
+- **Outils de lecture** (exécutés automatiquement) : `site_overview`, `read_logs`, `fetch_page` (pages du site uniquement), `list_files`, `read_file`, `search_files` (dans `wp-content` uniquement), `get_options`, `list_content`, `get_content`, `db_query_read` (une requête en lecture seule, transaction `READ ONLY`, 200 lignes maximum).
+- **Garde-fous** : `wp-config.php`, `.env` et le cœur de WordPress inaccessibles, liens symboliques sortants refusés, secrets (constantes, clés d'API, mots de passe) et données personnelles (e-mails, téléphones, adresses, IP) masqués avant envoi, résultats tronqués à 20 000 caractères, 40 étapes maximum par demande et budget par conversation fixé par le proxy.
+- **Données** : conversations stockées sur le site (`{prefix}upsidly_agent_conversations`, `…_messages`), purgées après 90 jours (cron `upsidly_agent_daily_purge`). Le proxy ne conserve que des compteurs.
+- Les outils qui modifient le site (lot B) et les outils dangereux (lot C) ne sont pas encore disponibles.

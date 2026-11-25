@@ -33,3 +33,4 @@ require __DIR__ . '/class-fake-client.php';
 
 // Table du journal (créée normalement à l'activation).
 Upsidly_Agent_Log::create_table();
+Upsidly_Agent_Agent_Store::create_tables();

@@ -13,7 +13,15 @@ defined( 'ABSPATH' ) || exit;
 class Upsidly_Agent_Admin {
 
 	const SLUG         = 'upsidly-agent';
+	const AGENT_SLUG   = 'upsidly-agent-chat';
 	const HISTORY_SLUG = 'upsidly-agent-history';
+
+	/**
+	 * Suffixe de hook de la page Agent.
+	 *
+	 * @var string
+	 */
+	private static $agent_hook = '';
 
 	/**
 	 * Suffixe de hook de la page Assistant.
@@ -27,6 +35,7 @@ class Upsidly_Agent_Admin {
 	 */
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'menus' ) );
+		add_action( 'admin_menu', array( __CLASS__, 'order_submenu' ), 99 );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 		add_action( 'admin_bar_menu', array( __CLASS__, 'admin_bar' ), 80 );
 		add_action( 'admin_init', array( __CLASS__, 'activation_redirect' ) );
@@ -59,9 +68,37 @@ class Upsidly_Agent_Admin {
 			58
 		);
 
-		add_submenu_page( self::SLUG, __( 'Assistant', 'upsidly-agent' ), __( 'Assistant', 'upsidly-agent' ), 'edit_posts', self::SLUG, array( __CLASS__, 'render_assistant' ) );
+		add_submenu_page( self::SLUG, __( 'Rédaction rapide', 'upsidly-agent' ), __( 'Rédaction rapide', 'upsidly-agent' ), 'edit_posts', self::SLUG, array( __CLASS__, 'render_assistant' ) );
+		self::$agent_hook = (string) add_submenu_page( self::SLUG, __( 'Agent', 'upsidly-agent' ), __( 'Agent', 'upsidly-agent' ), Upsidly_Agent_Agent_Rest::CAPABILITY, self::AGENT_SLUG, array( __CLASS__, 'render_agent' ) );
 		add_submenu_page( self::SLUG, __( 'Historique', 'upsidly-agent' ), __( 'Historique', 'upsidly-agent' ), 'edit_posts', self::HISTORY_SLUG, array( __CLASS__, 'render_history' ) );
 		add_submenu_page( self::SLUG, __( 'Réglages', 'upsidly-agent' ), __( 'Réglages', 'upsidly-agent' ), 'manage_options', Upsidly_Agent_Settings::PAGE, array( 'Upsidly_Agent_Settings', 'render_page' ) );
+	}
+
+	/**
+	 * Place « Agent » en tête du sous-menu.
+	 */
+	public static function order_submenu() {
+		global $submenu;
+		if ( empty( $submenu[ self::SLUG ] ) ) {
+			return;
+		}
+		$items = $submenu[ self::SLUG ];
+		usort(
+			$items,
+			static function ( $a, $b ) {
+				return ( self::AGENT_SLUG === $b[2] ) <=> ( self::AGENT_SLUG === $a[2] );
+			}
+		);
+		$submenu[ self::SLUG ] = $items; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- réordonnancement du sous-menu du plugin.
+	}
+
+	/**
+	 * URL de la page Agent.
+	 *
+	 * @return string
+	 */
+	public static function agent_url() {
+		return add_query_arg( array( 'page' => self::AGENT_SLUG ), admin_url( 'admin.php' ) );
 	}
 
 	/**
@@ -70,6 +107,10 @@ class Upsidly_Agent_Admin {
 	 * @param string $hook Suffixe de la page courante.
 	 */
 	public static function enqueue( $hook ) {
+		if ( $hook === self::$agent_hook ) {
+			self::enqueue_agent();
+			return;
+		}
 		if ( $hook !== self::$assistant_hook || '' === Upsidly_Agent_Settings::get_key() ) {
 			return;
 		}
@@ -94,6 +135,79 @@ class Upsidly_Agent_Admin {
 		if ( is_readable( UPSIDLY_AGENT_DIR . 'build/style-index.css' ) ) {
 			wp_enqueue_style( 'upsidly-agent-app', UPSIDLY_AGENT_URL . 'build/style-index.css', array( 'wp-components' ), $asset['version'] );
 		}
+	}
+
+	/**
+	 * Scripts de la page Agent.
+	 */
+	private static function enqueue_agent() {
+		if ( ! Upsidly_Agent_Agent_Rest::can_use() ) {
+			return;
+		}
+		$asset_file = UPSIDLY_AGENT_DIR . 'build/agent.asset.php';
+		if ( ! is_readable( $asset_file ) ) {
+			return;
+		}
+		$asset = require $asset_file;
+
+		wp_enqueue_script( 'upsidly-agent-chat', UPSIDLY_AGENT_URL . 'build/agent.js', $asset['dependencies'], $asset['version'], true );
+		wp_add_inline_script( 'upsidly-agent-chat', 'window.upsidlyAgentChat = ' . wp_json_encode( self::agent_data() ) . ';', 'before' );
+		wp_set_script_translations( 'upsidly-agent-chat', 'upsidly-agent', UPSIDLY_AGENT_DIR . 'languages' );
+
+		wp_enqueue_style( 'wp-components' );
+		if ( is_readable( UPSIDLY_AGENT_DIR . 'build/agent.css' ) ) {
+			wp_enqueue_style( 'upsidly-agent-chat', UPSIDLY_AGENT_URL . 'build/agent.css', array( 'wp-components' ), $asset['version'] );
+		}
+	}
+
+	/**
+	 * Données injectées dans la page Agent. Jamais la clé.
+	 *
+	 * @return array
+	 */
+	public static function agent_data() {
+		$user = wp_get_current_user();
+		return array(
+			'siteName'    => get_bloginfo( 'name' ),
+			'userName'    => $user->display_name,
+			'ack'         => (bool) get_user_meta( $user->ID, Upsidly_Agent_Agent_Rest::ACK_META, true ),
+			'settingsUrl' => current_user_can( 'manage_options' ) ? Upsidly_Agent_Settings::page_url() : '',
+			'historyUrl'  => add_query_arg( array( 'page' => self::HISTORY_SLUG ), admin_url( 'admin.php' ) ),
+		);
+	}
+
+	/**
+	 * Page Agent.
+	 */
+	public static function render_agent() {
+		if ( ! current_user_can( Upsidly_Agent_Agent_Rest::CAPABILITY ) ) {
+			return;
+		}
+		$message = '';
+		if ( '' === Upsidly_Agent_Settings::get_key() ) {
+			$message = __( 'L\'assistant n\'est pas encore configuré : renseignez la clé dans Réglages.', 'upsidly-agent' );
+		} elseif ( ! Upsidly_Agent_Settings::agent_enabled() ) {
+			$message = __( 'L\'agent est désactivé sur ce site. Vous pouvez l\'activer dans Réglages.', 'upsidly-agent' );
+		} elseif ( ! is_readable( UPSIDLY_AGENT_DIR . 'build/agent.asset.php' ) ) {
+			$message = __( 'Les fichiers de l\'interface sont absents. Installez le plugin à partir du fichier ZIP de la release.', 'upsidly-agent' );
+		}
+		?>
+		<div class="wrap upsidly-agent-chat-wrap">
+			<?php if ( '' !== $message ) : ?>
+				<h1><?php esc_html_e( 'Agent', 'upsidly-agent' ); ?></h1>
+				<div class="notice notice-warning inline">
+					<p>
+						<?php echo esc_html( $message ); ?>
+						<?php if ( current_user_can( 'manage_options' ) ) : ?>
+							<a href="<?php echo esc_url( Upsidly_Agent_Settings::page_url() ); ?>"><?php esc_html_e( 'Ouvrir les réglages', 'upsidly-agent' ); ?></a>
+						<?php endif; ?>
+					</p>
+				</div>
+			<?php else : ?>
+				<div id="upsidly-agent-chat"></div>
+			<?php endif; ?>
+		</div>
+		<?php
 	}
 
 	/**
@@ -266,7 +380,7 @@ class Upsidly_Agent_Admin {
 			array(
 				'id'    => 'upsidly-agent',
 				'title' => __( 'Assistant IA', 'upsidly-agent' ),
-				'href'  => self::assistant_url(),
+				'href'  => Upsidly_Agent_Agent_Rest::can_use() ? self::agent_url() : self::assistant_url(),
 			)
 		);
 	}
@@ -302,7 +416,7 @@ class Upsidly_Agent_Admin {
 		wp_add_privacy_policy_content(
 			__( 'Upsidly Agent', 'upsidly-agent' ),
 			wp_kses_post(
-				'<p>' . __( 'Lorsqu\'un membre de l\'équipe du site utilise l\'assistant de rédaction, les consignes saisies et, le cas échéant, le contenu de la page à modifier sont transmis à Upsidly et à son fournisseur d\'intelligence artificielle (Anthropic) afin de générer une proposition de texte. Aucune donnée des visiteurs du site n\'est transmise.', 'upsidly-agent' ) . '</p>'
+				'<p>' . __( 'Lorsqu\'un membre de l\'équipe du site utilise l\'assistant de rédaction, les consignes saisies et, le cas échéant, le contenu de la page à modifier sont transmis à Upsidly et à son fournisseur d\'intelligence artificielle (Anthropic) afin de générer une proposition de texte. Lorsque l\'agent de maintenance est utilisé, des extraits techniques du site (fichiers des thèmes et extensions, journaux d\'erreurs, réglages, contenus, résultats de requêtes) peuvent aussi être transmis pour diagnostiquer un problème ; les données personnelles (adresses e-mail, téléphones, adresses, adresses IP) et les secrets (mots de passe, clés) sont masqués avant tout envoi. Aucune donnée n\'est transmise lors des visites du site.', 'upsidly-agent' ) . '</p>'
 			)
 		);
 	}

@@ -30,6 +30,36 @@ class Upsidly_Agent_Environment {
 	}
 
 	/**
+	 * Environnement envoyé au proxy à chaque étape de l'agent.
+	 *
+	 * @return array
+	 */
+	public static function agent_data() {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+		$names  = array();
+		$all    = get_plugins();
+		$active = (array) get_option( 'active_plugins', array() );
+		foreach ( $active as $file ) {
+			$names[] = isset( $all[ $file ] ) ? $all[ $file ]['Name'] . ' ' . $all[ $file ]['Version'] : (string) $file;
+		}
+		$theme = wp_get_theme();
+
+		return array(
+			'wp_version'        => (string) get_bloginfo( 'version' ),
+			'php_version'       => PHP_VERSION,
+			'theme'             => $theme->get( 'Name' ) . ' ' . $theme->get( 'Version' ) . ( $theme->parent() ? ' (enfant de ' . $theme->parent()->get( 'Name' ) . ')' : '' ),
+			'page_builder'      => self::page_builder(),
+			'seo_plugin'        => self::seo_plugin(),
+			'is_multisite'      => is_multisite(),
+			'file_edit_allowed' => ! ( defined( 'DISALLOW_FILE_EDIT' ) && DISALLOW_FILE_EDIT ),
+			'file_mods_allowed' => ! ( defined( 'DISALLOW_FILE_MODS' ) && DISALLOW_FILE_MODS ),
+			'active_plugins'    => array_slice( $names, 0, 80 ),
+		);
+	}
+
+	/**
 	 * Plugin SEO principal : rank-math, yoast, seopress ou none.
 	 *
 	 * @return string

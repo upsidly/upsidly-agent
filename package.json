@@ -1,12 +1,12 @@
 {
 	"name": "upsidly-agent",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"private": true,
 	"description": "Assistant IA dans l'administration WordPress (interface React).",
 	"license": "GPL-2.0-or-later",
 	"scripts": {
-		"build": "wp-scripts build",
-		"start": "wp-scripts start",
+		"build": "wp-scripts build index=./src/index.js agent=./src/agent/index.js",
+		"start": "wp-scripts start index=./src/index.js agent=./src/agent/index.js",
 		"format": "wp-scripts format ./src",
 		"lint:js": "wp-scripts lint-js ./src",
 		"lint:css": "wp-scripts lint-style \"./src/**/*.scss\""
