@@ -87,7 +87,7 @@ class Upsidly_Agent_Content_Types {
 	 */
 	public static function origin_labels() {
 		return array(
-			'wordpress'   => __( 'WordPress', 'upsidly-agent' ),
+			'core'        => __( 'WordPress', 'upsidly-agent' ),
 			'woocommerce' => __( 'WooCommerce', 'upsidly-agent' ),
 			'acf'         => __( 'Sur mesure (ACF)', 'upsidly-agent' ),
 			'jetengine'   => __( 'Sur mesure (JetEngine)', 'upsidly-agent' ),
@@ -378,11 +378,11 @@ class Upsidly_Agent_Content_Types {
 	 * @param string $kind     post_type | taxonomy.
 	 * @param string $slug     Nom technique.
 	 * @param bool   $built_in Natif de WordPress.
-	 * @return string WordPress | woocommerce | acf | jetengine | code.
+	 * @return string core | woocommerce | acf | jetengine | code.
 	 */
 	public static function origin( $kind, $slug, $built_in ) {
 		if ( $built_in ) {
-			return 'WordPress';
+			return 'core';
 		}
 		if ( in_array( $slug, self::WOOCOMMERCE, true ) ) {
 			return 'woocommerce';

@@ -120,7 +120,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$this->assertNotContains( 'wp_block', $slugs );
 
 		$by_slug = array_column( $types, null, 'slug' );
-		$this->assertSame( 'wordpress', $by_slug['post']['origin'] );
+		$this->assertSame( 'core', $by_slug['post']['origin'] );
 		$this->assertSame( 'code', $by_slug['temoignage']['origin'] );
 		$this->assertSame( 'Sur mesure', $by_slug['temoignage']['originLabel'] );
 
