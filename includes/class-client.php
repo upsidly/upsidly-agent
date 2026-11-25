@@ -206,6 +206,11 @@ class Upsidly_Agent_Client {
 
 		$error   = ( is_array( $body ) && isset( $body['error'] ) && is_array( $body['error'] ) ) ? $body['error'] : array();
 		$code    = isset( $error['code'] ) && is_string( $error['code'] ) ? $error['code'] : 'upsidly_agent_unexpected';
+
+		// Réponse non JSON d'un intermédiaire (page d'erreur Cloudflare, passerelle…) : service indisponible.
+		if ( ! $error && $status >= 500 ) {
+			$code = 'uap_upstream_unreachable';
+		}
 		$credits = isset( $error['credits'] ) && is_array( $error['credits'] ) ? $error['credits'] : null;
 		$proxy   = isset( $error['message'] ) && is_string( $error['message'] ) ? $error['message'] : '';
 

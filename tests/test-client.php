@@ -81,9 +81,14 @@ class Test_Upsidly_Agent_Client extends WP_UnitTestCase {
 	public function test_normalize() {
 		$this->assertSame( array( 'ok' => true ), Upsidly_Agent_Client::normalize( array( 'status' => 200, 'body' => array( 'ok' => true ) ) ) );
 
-		$error = Upsidly_Agent_Client::normalize( array( 'status' => 500, 'body' => null ) );
+		$error = Upsidly_Agent_Client::normalize( array( 'status' => 400, 'body' => null ) );
 		$this->assertSame( 'upsidly_agent_unexpected', $error->get_error_code() );
 		$this->assertSame( 'Une erreur inattendue s\'est produite.', $error->get_error_message() );
+
+		// Page HTML d'erreur Cloudflare (502) : message « service indisponible ».
+		$gateway = Upsidly_Agent_Client::normalize( array( 'status' => 502, 'body' => null ) );
+		$this->assertSame( 'uap_upstream_unreachable', $gateway->get_error_code() );
+		$this->assertStringContainsString( 'momentanément indisponible', $gateway->get_error_message() );
 	}
 
 	/**
