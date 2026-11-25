@@ -35,14 +35,21 @@ tests_add_filter(
 	}
 );
 
+// Installation de WooCommerce (tables, rôles) avant le chargement du thème, comme dans ses propres tests.
+tests_add_filter(
+	'setup_theme',
+	static function () {
+		if ( class_exists( 'WC_Install' ) ) {
+			WC_Install::install();
+			$GLOBALS['wp_roles'] = new WP_Roles(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
+	}
+);
+
 require "{$_tests_dir}/includes/bootstrap.php";
 
 require __DIR__ . '/class-fake-client.php';
 
-if ( class_exists( 'WC_Install' ) ) {
-	WC_Install::install();
-	$GLOBALS['wp_roles'] = new WP_Roles(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-}
 
 // Table du journal (créée normalement à l'activation).
 Upsidly_Agent_Log::create_table();

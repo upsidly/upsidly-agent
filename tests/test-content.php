@@ -98,7 +98,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 	 * @param array $body Corps.
 	 * @return WP_REST_Response
 	 */
-	private function run( array $body ) {
+	private function run_content( array $body ) {
 		$request = new WP_REST_Request( 'POST', '/upsidly-agent/v1/run' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( wp_json_encode( array( 'skill' => 'rediger-contenu' ) + $body ) );
@@ -177,7 +177,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			)
 		);
 
-		$response = $this->run(
+		$response = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'temoignage',
@@ -228,7 +228,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			)
 		);
 
-		$denied = $this->run(
+		$denied = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'post',
@@ -241,7 +241,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		$this->assertSame( 'upsidly_agent_publish', $denied->get_data()['code'] );
 		$this->assertSame( array(), $this->client->requests );
 
-		$type_denied = $this->run(
+		$type_denied = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'page',
@@ -251,7 +251,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 		);
 		$this->assertSame( 403, $type_denied->get_status() );
 
-		$ok = $this->run(
+		$ok = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'post',
@@ -322,7 +322,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			)
 		);
 
-		$response = $this->run(
+		$response = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'product',
@@ -384,7 +384,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			)
 		);
 
-		$data    = $this->run(
+		$data    = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'product',
@@ -459,7 +459,7 @@ class Test_Upsidly_Agent_Content extends WP_UnitTestCase {
 			)
 		);
 
-		$data = $this->run(
+		$data = $this->run_content(
 			array(
 				'inputs' => array(
 					'type_contenu' => 'temoignage',
