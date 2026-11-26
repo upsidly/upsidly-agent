@@ -29,6 +29,11 @@ class Upsidly_Agent_Connector {
 	const NOTICE_PREFIX = 'upsidly_agent_notice_';
 
 	/**
+	 * Logo Upsidly (SVG, lettres en couleur du texte).
+	 */
+	const LOGO = '<svg viewBox="0 0 221 66" width="67" height="20" role="img" aria-label="Upsidly" style="vertical-align:-4px;margin-right:6px"><path d="M16.7928 49.7589C6.74465 49.7589 0 43.9778 0 32.622V14.8658H6.53818V32.622C6.53818 39.9861 10.5987 43.7025 16.7928 43.7025C22.9869 43.7025 27.0474 39.9861 27.0474 32.622V14.8658H33.5856V32.622C33.5856 43.909 26.8409 49.7589 16.7928 49.7589Z" fill="currentColor"/><path d="M204.208 49.7588C194.159 49.7588 187.415 43.9777 187.415 32.6219V14.8657H193.953V32.6219C193.953 39.986 198.014 43.7024 204.208 43.7024C210.402 43.7024 214.462 39.986 214.462 32.6219V14.8657H221V32.6219C221 43.9088 214.256 49.7588 204.208 49.7588Z" fill="#2D22AD"/><path d="M204.208 66.0012C194.159 66.0012 187.415 60.2201 187.415 48.8643L193.953 48.8643C193.953 56.2283 198.014 59.9448 204.208 59.9448C210.402 59.9448 214.462 56.2284 214.462 48.8643H221C221 60.1512 214.256 66.0012 204.208 66.0012Z" fill="#2D22AD"/><path d="M39.5658 63.3857V32.1402C39.5658 21.0598 47.1363 13.971 57.6662 13.971C68.4714 13.971 76.042 21.4039 76.042 32.0714C76.042 43.3583 67.6456 49.7588 58.7674 49.7588C53.2616 49.7588 48.5816 47.2812 46.104 42.8766V63.3857H39.5658ZM57.7351 43.7024C64.755 43.7024 69.435 38.7472 69.435 31.8649C69.435 24.9826 64.755 20.0274 57.7351 20.0274C50.7839 20.0274 46.104 24.9826 46.104 31.8649C46.104 38.7472 50.7839 43.7024 57.7351 43.7024Z" fill="currentColor"/><path d="M94.3075 49.7588C85.7734 49.7588 80.4052 45.2165 80.1987 39.0225H86.8058C86.9434 41.8442 89.5587 43.8401 94.3075 43.8401C99.2627 43.8401 101.809 41.7066 101.809 39.0225C101.809 35.7878 98.2304 35.3749 93.9633 34.8243C88.0446 34.0672 80.887 32.9661 80.887 25.1891C80.887 18.5133 86.1175 13.971 94.2386 13.971C102.36 13.971 107.384 18.5821 107.521 24.4321H101.052C100.846 21.8168 98.4368 19.8898 94.3075 19.8898C89.9716 19.8898 87.494 21.9544 87.494 24.6385C87.494 27.8732 91.0728 28.2173 95.271 28.7679C101.19 29.5249 108.416 30.6261 108.416 38.4031C108.416 45.2853 102.841 49.7588 94.3075 49.7588Z" fill="currentColor"/><path d="M118.373 9.49754C115.758 9.49754 113.831 7.50168 113.831 4.88641C113.831 2.27115 115.758 0.344113 118.373 0.344113C120.989 0.344113 122.916 2.27115 122.916 4.88641C122.916 7.50168 120.989 9.49754 118.373 9.49754ZM115.139 48.8641V14.8657H121.677V48.8641H115.139Z" fill="currentColor"/><path d="M146.559 49.7588C135.754 49.7588 128.183 42.326 128.183 31.6585C128.183 20.3715 136.58 13.971 145.458 13.971C150.964 13.971 155.644 16.4486 158.121 20.8533V0H164.66V31.5896C164.66 42.6701 157.089 49.7588 146.559 49.7588ZM146.49 43.7024C153.441 43.7024 158.121 38.7472 158.121 31.8649C158.121 24.9826 153.441 20.0274 146.49 20.0274C139.47 20.0274 134.79 24.9826 134.79 31.8649C134.79 38.7472 139.47 43.7024 146.49 43.7024Z" fill="currentColor"/><path d="M172.67 48.8641V0H179.209V48.8641H172.67Z" fill="currentColor"/></svg>';
+
+	/**
 	 * Administrateur au nom duquel s'exécute une demande signée valide (0 sinon).
 	 *
 	 * @var int
@@ -329,9 +334,11 @@ class Upsidly_Agent_Connector {
 		if ( self::is_linked() || ! $screen || ! in_array( $screen->id, array( 'plugins', 'dashboard' ), true ) ) {
 			return;
 		}
-		echo '<div class="notice notice-info"><p><strong>' . esc_html__( 'Upsidly Agent', 'upsidly-agent' ) . '</strong> — '
+		// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- logo statique et formulaire échappé dans link_form().
+		echo '<div class="notice notice-info"><p>' . self::LOGO . '<strong>' . esc_html__( 'Upsidly Agent', 'upsidly-agent' ) . '</strong> — '
 			. esc_html__( 'Reliez ce site à votre compte Upsidly pour piloter l\'agent IA et la rédaction depuis votre tableau de bord upsidly.app. Aucune clé à copier.', 'upsidly-agent' )
-			. '</p><p>' . self::link_form() . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- formulaire échappé dans link_form().
+			. '</p><p>' . self::link_form() . '</p></div>';
+		// phpcs:enable
 	}
 
 	// Demandes signées.
