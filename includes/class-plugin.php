@@ -106,7 +106,7 @@ final class Upsidly_Agent_Plugin {
 	}
 
 	/**
-	 * Mises à jour depuis les releases GitHub (Plugin Update Checker).
+	 * Mises à jour proposées par WordPress depuis api.upsidly.app (Plugin Update Checker).
 	 */
 	private function init_updates() {
 		$loader = UPSIDLY_AGENT_DIR . 'vendor/plugin-update-checker/plugin-update-checker.php';
@@ -120,20 +120,16 @@ final class Upsidly_Agent_Plugin {
 			return;
 		}
 
-		$checker = $factory::buildUpdateChecker(
-			'https://github.com/upsidly/upsidly-agent/',
+		// Fiche de version servie par Upsidly (les versions 1.x ne passent plus par les releases GitHub).
+		$factory::buildUpdateChecker(
+			rtrim( UPSIDLY_AGENT_API_URL, '/' ) . '/plugin/info.json',
 			UPSIDLY_AGENT_FILE,
 			'upsidly-agent'
 		);
-
-		$api = $checker->getVcsApi();
-		if ( is_object( $api ) && method_exists( $api, 'enableReleaseAssets' ) ) {
-			$api->enableReleaseAssets( '/upsidly-agent\.zip$/i' );
-		}
 	}
 
 	/**
-	 * Activation : tables, cron, invitation à relier le site.
+	 * Activation : tables, cron, puis liaison lancée seule au prochain écran d'administration.
 	 *
 	 * @param bool $network_wide Activation réseau (multisite).
 	 */
@@ -150,6 +146,7 @@ final class Upsidly_Agent_Plugin {
 		}
 
 		self::upgrade_site();
+		Upsidly_Agent_Connector::schedule_activation_redirect();
 	}
 
 	/**

@@ -6,9 +6,15 @@ L'extension n'a **aucune interface** dans WordPress : un bouton « Relier à Ups
 
 ## Liaison
 
-1. Extensions → « Relier à Upsidly » → approbation sur le tableau de bord (compte Upsidly connecté).
+1. Liaison lancée de trois façons : automatiquement juste après l'activation ; par le lien « Relier mon site » de l'assistant du tableau de bord (`/wp-admin/admin-post.php?action=upsidly_agent_connect`, connexion WordPress demandée si besoin, refusé si le site est déjà relié) ; ou par le bouton « Relier à Upsidly » de la page Extensions. Puis approbation sur le tableau de bord (compte Upsidly connecté ; sautée quand la personne a commencé par l'assistant du tableau de bord).
 2. Retour sur WordPress avec un code à usage unique, échangé serveur à serveur (`POST https://api.upsidly.app/v1/connector/claim`) contre un secret partagé, stocké chiffré (libsodium, clé dérivée des clés de WordPress).
 3. Les actions demandées depuis le tableau de bord s'exécutent avec les droits de l'administrateur qui a relié le site.
+
+Détection publique pour l'assistant : `GET /wp-admin/admin-ajax.php?action=upsidly_agent_hello` → `{ "plugin": "upsidly-agent", "version", "linked" }`.
+
+## Mises à jour
+
+Depuis la 1.1, WordPress propose les mises à jour à partir de la fiche `https://api.upsidly.app/plugin/info.json` (Plugin Update Checker) ; l'archive est servie par api.upsidly.app. Les versions 0.x et 1.0 lisent encore les releases GitHub : n'y publier aucune 1.x tant que des sites en 0.x existent (elle leur serait proposée).
 
 ## Demandes d'Upsidly
 

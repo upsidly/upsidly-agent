@@ -2,8 +2,12 @@
 /**
  * Connecteur : liaison du site à un compte Upsidly et exécution des demandes signées d'api.upsidly.app.
  *
- * Liaison : l'administrateur clique « Relier à Upsidly », approuve sur le dashboard, revient avec un code
- * à usage unique ; le plugin l'échange (serveur à serveur) contre un secret partagé et une clé de site.
+ * Liaison : l'administrateur clique « Relier à Upsidly » (ou suit le lien ouvert par l'assistant du dashboard,
+ * ou est redirigé juste après l'activation), approuve sur le dashboard, revient avec un code à usage unique ;
+ * le plugin l'échange (serveur à serveur) contre un secret partagé et une clé de site.
+ *
+ * Détection : admin-ajax.php?action=upsidly_agent_hello (public) indique la présence de l'extension, sa version
+ * et si le site est relié, pour que l'assistant du dashboard guide la personne.
  *
  * Demandes : POST admin-ajax.php?action=upsidly_connector, corps JSON { op, ... }, signé HMAC-SHA256
  * (horodatage + nonce, rejeu impossible). Exécutées au nom de l'administrateur qui a relié le site,
@@ -27,6 +31,8 @@ class Upsidly_Agent_Connector {
 	const NONCE_PREFIX  = 'upsidly_agent_cn_';
 	const OPS           = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all', 'actions.stop', 'content.catalog', 'content.prepare', 'content.save' );
 	const NOTICE_PREFIX = 'upsidly_agent_notice_';
+	const HELLO_ACTION  = 'upsidly_agent_hello';
+	const REDIRECT_KEY  = 'upsidly_agent_activation_redirect_';
 
 	/**
 	 * Logo Upsidly (SVG, lettres en couleur du texte).
@@ -61,6 +67,11 @@ class Upsidly_Agent_Connector {
 		add_action( 'admin_post_upsidly_agent_link', array( __CLASS__, 'start_link' ) );
 		add_action( 'admin_post_upsidly_agent_link_return', array( __CLASS__, 'finish_link' ) );
 		add_action( 'admin_post_upsidly_agent_unlink', array( __CLASS__, 'unlink' ) );
+		add_action( 'admin_post_upsidly_agent_connect', array( __CLASS__, 'connect' ) );
+		add_action( 'admin_post_nopriv_upsidly_agent_connect', 'auth_redirect' );
+		add_action( 'wp_ajax_' . self::HELLO_ACTION, array( __CLASS__, 'hello' ) );
+		add_action( 'wp_ajax_nopriv_' . self::HELLO_ACTION, array( __CLASS__, 'hello' ) );
+		add_action( 'admin_init', array( __CLASS__, 'redirect_after_activation' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'admin_notices' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( UPSIDLY_AGENT_FILE ), array( __CLASS__, 'action_links' ) );
 		add_filter( 'plugin_row_meta', array( __CLASS__, 'row_meta' ), 10, 2 );
@@ -125,7 +136,68 @@ class Upsidly_Agent_Connector {
 			wp_die( esc_html__( 'Vous n\'avez pas les droits suffisants.', 'upsidly-agent' ), 403 );
 		}
 		check_admin_referer( 'upsidly_agent_link' );
+		self::go_to_dashboard();
+	}
 
+	/**
+	 * Lien « Relier » ouvert depuis l'assistant du dashboard ou après l'activation (connexion WordPress demandée
+	 * si besoin). Sans jeton : il ne fait que lancer la liaison, que la personne approuve ensuite sur le dashboard
+	 * avec son propre compte Upsidly. Un site déjà relié n'est jamais relié de nouveau par ce lien.
+	 */
+	public static function connect() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Seul un administrateur du site peut le relier à Upsidly.', 'upsidly-agent' ), 403 );
+		}
+		if ( self::is_linked() ) {
+			self::notice( 'success', __( 'Ce site est déjà relié à Upsidly. Pour le relier à un autre compte, déliez-le d\'abord depuis la page Extensions.', 'upsidly-agent' ) );
+		}
+		self::go_to_dashboard();
+	}
+
+	/**
+	 * Juste après l'activation (par un administrateur, site non relié) : la liaison démarre seule.
+	 */
+	public static function redirect_after_activation() {
+		$key = self::REDIRECT_KEY . get_current_user_id();
+		if ( ! get_transient( $key ) ) {
+			return;
+		}
+		delete_transient( $key );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- simple lecture : activation groupée.
+		if ( wp_doing_ajax() || is_network_admin() || isset( $_GET['activate-multi'] ) || ! current_user_can( 'manage_options' ) || self::is_linked() ) {
+			return;
+		}
+		wp_safe_redirect( admin_url( 'admin-post.php?action=upsidly_agent_connect' ) );
+		exit;
+	}
+
+	/**
+	 * Mémorise la redirection vers la liaison (appelé à l'activation de l'extension).
+	 */
+	public static function schedule_activation_redirect() {
+		if ( get_current_user_id() > 0 && ! self::is_linked() ) {
+			set_transient( self::REDIRECT_KEY . get_current_user_id(), 1, 5 * MINUTE_IN_SECONDS );
+		}
+	}
+
+	/**
+	 * Détection publique pour l'assistant du dashboard : extension présente, version, site relié ou non.
+	 */
+	public static function hello() {
+		nocache_headers();
+		wp_send_json(
+			array(
+				'plugin'  => 'upsidly-agent',
+				'version' => UPSIDLY_AGENT_VERSION,
+				'linked'  => self::is_linked(),
+			)
+		);
+	}
+
+	/**
+	 * Redirection vers le dashboard avec un état anti-falsification (valable 20 minutes).
+	 */
+	private static function go_to_dashboard() {
 		$state = wp_generate_password( 40, false, false );
 		set_transient( self::STATE_PREFIX . get_current_user_id(), $state, 20 * MINUTE_IN_SECONDS );
 

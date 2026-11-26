@@ -260,4 +260,27 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 		$this->assertWPError( Upsidly_Agent_Connector::dispatch( array( 'op' => 'inconnu' ) ) );
 		$this->assertWPError( Upsidly_Agent_Connector::dispatch( array( 'op' => 'actions.decide', 'action_id' => 1, 'decision' => 'peut-etre' ) ) );
 	}
+
+	/**
+	 * Activation par un administrateur : liaison lancée au prochain écran, sauf site déjà relié.
+	 */
+	public function test_activation_schedules_the_link_once() {
+		$key = Upsidly_Agent_Connector::REDIRECT_KEY . $this->admin;
+		delete_option( Upsidly_Agent_Connector::OPTION );
+		Upsidly_Agent_Connector::schedule_activation_redirect();
+		$this->assertSame( 1, (int) get_transient( $key ) );
+
+		delete_transient( $key );
+		update_option(
+			Upsidly_Agent_Connector::OPTION,
+			array(
+				'site_id'   => 1,
+				'user_id'   => $this->admin,
+				'linked_at' => time(),
+				'secret'    => Upsidly_Agent_Connector::encrypt( str_repeat( 'a', 64 ) ),
+			)
+		);
+		Upsidly_Agent_Connector::schedule_activation_redirect();
+		$this->assertFalse( get_transient( $key ) );
+	}
 }
