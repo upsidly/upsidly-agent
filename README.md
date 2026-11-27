@@ -26,6 +26,7 @@ Depuis la 1.1, WordPress propose les mises à jour à partir de la fiche `https:
 | `tools.run` | Outils demandés par l'agent : lecture exécutée, écriture en attente avec aperçu (niveau d'agent transmis par Upsidly) |
 | `actions.list` / `actions.decide` / `actions.undo` / `actions.undo_all` / `actions.stop` | Actions de la conversation, validation ou refus, annulation (sauvegarde restaurée), arrêt |
 | `content.catalog` / `content.prepare` / `content.save` | Rédaction : types et taxonomies, entrées complétées pour l'IA, enregistrement du résultat nettoyé |
+| `site.disconnect` | Site retiré du compte depuis le tableau de bord : liaison oubliée (≥ 1.1.1) |
 
 ## Développement
 

@@ -283,4 +283,22 @@ class Test_Upsidly_Agent_Connector extends WP_UnitTestCase {
 		Upsidly_Agent_Connector::schedule_activation_redirect();
 		$this->assertFalse( get_transient( $key ) );
 	}
+
+	/**
+	 * Site retiré du compte depuis le tableau de bord : la liaison est oubliée.
+	 */
+	public function test_disconnect_forgets_the_link() {
+		update_option(
+			Upsidly_Agent_Connector::OPTION,
+			array(
+				'site_id'   => 1,
+				'user_id'   => $this->admin,
+				'linked_at' => time(),
+				'secret'    => Upsidly_Agent_Connector::encrypt( str_repeat( 'b', 64 ) ),
+			)
+		);
+		$this->assertTrue( Upsidly_Agent_Connector::is_linked() );
+		$this->assertSame( array( 'disconnected' => true ), Upsidly_Agent_Connector::dispatch( array( 'op' => 'site.disconnect' ) ) );
+		$this->assertFalse( Upsidly_Agent_Connector::is_linked() );
+	}
 }

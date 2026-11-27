@@ -29,7 +29,7 @@ class Upsidly_Agent_Connector {
 	const MAX_BODY      = 4194304;
 	const STATE_PREFIX  = 'upsidly_agent_link_state_';
 	const NONCE_PREFIX  = 'upsidly_agent_cn_';
-	const OPS           = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all', 'actions.stop', 'content.catalog', 'content.prepare', 'content.save' );
+	const OPS           = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all', 'actions.stop', 'content.catalog', 'content.prepare', 'content.save', 'site.disconnect' );
 	const NOTICE_PREFIX = 'upsidly_agent_notice_';
 	const HELLO_ACTION  = 'upsidly_agent_hello';
 	const REDIRECT_KEY  = 'upsidly_agent_activation_redirect_';
@@ -562,6 +562,11 @@ class Upsidly_Agent_Connector {
 		}
 
 		switch ( (string) $payload['op'] ) {
+			case 'site.disconnect':
+				// Site retiré du compte depuis le tableau de bord : la liaison est oubliée, le site peut être relié à nouveau.
+				delete_option( self::OPTION );
+				return array( 'disconnected' => true );
+
 			case 'ping':
 				return array(
 					'plugin_version' => UPSIDLY_AGENT_VERSION,
