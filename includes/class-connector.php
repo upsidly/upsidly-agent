@@ -32,6 +32,8 @@ class Upsidly_Agent_Connector {
 	const OPS           = array( 'ping', 'tools.run', 'actions.list', 'actions.decide', 'actions.undo', 'actions.undo_all', 'actions.stop', 'content.catalog', 'content.prepare', 'content.save', 'site.disconnect' );
 	const NOTICE_PREFIX = 'upsidly_agent_notice_';
 	const HELLO_ACTION  = 'upsidly_agent_hello';
+	const PUSH_ACTION   = 'upsidly_agent_link_push';
+	const PUSH_PREFIX   = 'upsidly_agent_link_push_';
 	const REDIRECT_KEY  = 'upsidly_agent_activation_redirect_';
 
 	/**
@@ -71,6 +73,8 @@ class Upsidly_Agent_Connector {
 		add_action( 'admin_post_nopriv_upsidly_agent_connect', 'auth_redirect' );
 		add_action( 'wp_ajax_' . self::HELLO_ACTION, array( __CLASS__, 'hello' ) );
 		add_action( 'wp_ajax_nopriv_' . self::HELLO_ACTION, array( __CLASS__, 'hello' ) );
+		add_action( 'wp_ajax_' . self::PUSH_ACTION, array( __CLASS__, 'link_push' ) );
+		add_action( 'wp_ajax_nopriv_' . self::PUSH_ACTION, array( __CLASS__, 'link_push' ) );
 		add_action( 'admin_init', array( __CLASS__, 'redirect_after_activation' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'admin_notices' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( UPSIDLY_AGENT_FILE ), array( __CLASS__, 'action_links' ) );
@@ -195,11 +199,40 @@ class Upsidly_Agent_Connector {
 	}
 
 	/**
+	 * Liaison validée dans l'onglet du dashboard : Upsidly transmet le code (serveur à serveur), le site l'échange
+	 * comme au retour du dashboard. Seul l'état à usage unique, connu de la personne qui a lancé la liaison depuis
+	 * WordPress, permet cet envoi ; la liaison est faite au nom de l'administrateur qui l'a lancée.
+	 */
+	public static function link_push() {
+		$body  = json_decode( (string) file_get_contents( 'php://input', false, null, 0, 4096 ), true );
+		$code  = is_array( $body ) && is_string( $body['code'] ?? null ) ? $body['code'] : '';
+		$state = is_array( $body ) && is_string( $body['state'] ?? null ) ? $body['state'] : '';
+		if ( ! preg_match( '/^[a-f0-9]{64}$/', $code ) || ! preg_match( '/^[A-Za-z0-9]{20,128}$/', $state ) ) {
+			wp_send_json( array( 'error' => array( 'code' => 'bad_request', 'message' => 'Demande de liaison incomplète.' ) ), 400 );
+		}
+		$key     = self::PUSH_PREFIX . hash( 'sha256', $state );
+		$user_id = (int) get_transient( $key );
+		delete_transient( $key );
+		$user = $user_id > 0 ? get_userdata( $user_id ) : false;
+		if ( ! $user || ! user_can( $user, 'manage_options' ) ) {
+			wp_send_json( array( 'error' => array( 'code' => 'link_expired', 'message' => 'Liaison expirée : relancez-la depuis WordPress.' ) ), 403 );
+		}
+		delete_transient( self::STATE_PREFIX . $user_id );
+		wp_set_current_user( $user_id );
+		$result = self::claim( $code, $state );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json( array( 'error' => array( 'code' => 'claim_failed', 'message' => $result->get_error_message() ) ), 409 );
+		}
+		wp_send_json( array( 'linked' => true ) );
+	}
+
+	/**
 	 * Redirection vers le dashboard avec un état anti-falsification (valable 20 minutes).
 	 */
 	private static function go_to_dashboard() {
 		$state = wp_generate_password( 40, false, false );
 		set_transient( self::STATE_PREFIX . get_current_user_id(), $state, 20 * MINUTE_IN_SECONDS );
+		set_transient( self::PUSH_PREFIX . hash( 'sha256', $state ), get_current_user_id(), 20 * MINUTE_IN_SECONDS );
 
 		$url = self::dashboard_url() . '/relier?' . http_build_query(
 			array(
@@ -227,6 +260,9 @@ class Upsidly_Agent_Connector {
 
 		$expected = (string) get_transient( self::STATE_PREFIX . get_current_user_id() );
 		delete_transient( self::STATE_PREFIX . get_current_user_id() );
+		if ( '' !== $state ) {
+			delete_transient( self::PUSH_PREFIX . hash( 'sha256', $state ) );
+		}
 
 		if ( '' === $expected || '' === $state || ! hash_equals( $expected, $state ) || ! preg_match( '/^[a-f0-9]{64}$/', $code ) ) {
 			self::notice( 'error', __( 'Liaison interrompue ou expirée : recommencez depuis « Relier à Upsidly ».', 'upsidly-agent' ) );

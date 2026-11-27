@@ -12,6 +12,8 @@ L'extension n'a **aucune interface** dans WordPress : un bouton « Relier à Ups
 
 Détection publique pour l'assistant : `GET /wp-admin/admin-ajax.php?action=upsidly_agent_hello` → `{ "plugin": "upsidly-agent", "version", "linked" }`.
 
+Validation dans l'onglet du dashboard (≥ 1.2) : Upsidly envoie le code à `POST /wp-admin/admin-ajax.php?action=upsidly_agent_link_push` (`{ code, state }`), accepté seulement pour un état à usage unique lancé depuis WordPress (20 min) ; l'échange se fait ensuite comme au retour du dashboard.
+
 ## Mises à jour
 
 Depuis la 1.1, WordPress propose les mises à jour à partir de la fiche `https://api.upsidly.app/plugin/info.json` (Plugin Update Checker) ; l'archive est servie par api.upsidly.app. Les versions 0.x et 1.0 lisent encore les releases GitHub : n'y publier aucune 1.x tant que des sites en 0.x existent (elle leur serait proposée).
