@@ -3,7 +3,7 @@
  * Plugin Name:       Upsidly Agent
  * Plugin URI:        https://github.com/upsidly/upsidly-agent
  * Description:       Connecteur Upsidly : reliez ce site à votre tableau de bord upsidly.app pour y piloter l'agent IA et la rédaction. Aucun réglage dans WordPress.
- * Version:           1.2.0
+ * Version:           1.3.0
  * Requires at least: 6.4
  * Requires PHP:      8.0
  * Author:            Upsidly
@@ -19,7 +19,7 @@
 defined( 'ABSPATH' ) || exit;
 
 if ( ! defined( 'UPSIDLY_AGENT_VERSION' ) ) {
-	define( 'UPSIDLY_AGENT_VERSION', '1.2.0' );
+	define( 'UPSIDLY_AGENT_VERSION', '1.3.0' );
 }
 
 if ( ! defined( 'UPSIDLY_AGENT_API_URL' ) ) {

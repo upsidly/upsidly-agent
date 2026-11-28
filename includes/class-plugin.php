@@ -126,6 +126,27 @@ final class Upsidly_Agent_Plugin {
 			UPSIDLY_AGENT_FILE,
 			'upsidly-agent'
 		);
+
+		// Mises à jour automatiques de l'extension (désactivables : define( 'UPSIDLY_AGENT_AUTO_UPDATE', false ); dans wp-config.php).
+		add_filter( 'auto_update_plugin', array( __CLASS__, 'auto_update' ), 10, 2 );
+	}
+
+	/**
+	 * L'extension se met à jour toute seule, comme WordPress pour ses mises à jour de sécurité.
+	 *
+	 * @param bool|null $update Décision de WordPress ou d'une autre extension.
+	 * @param object    $item   Extension concernée.
+	 * @return bool|null
+	 */
+	public static function auto_update( $update, $item ) {
+		$file = is_object( $item ) && isset( $item->plugin ) ? (string) $item->plugin : '';
+		if ( plugin_basename( UPSIDLY_AGENT_FILE ) !== $file ) {
+			return $update;
+		}
+		if ( defined( 'UPSIDLY_AGENT_AUTO_UPDATE' ) && ! UPSIDLY_AGENT_AUTO_UPDATE ) {
+			return $update;
+		}
+		return true;
 	}
 
 	/**
